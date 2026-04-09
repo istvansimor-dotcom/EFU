@@ -30,7 +30,7 @@ export const FLR_PARASITISM_THRESHOLD = 20; // percent
 //           = (ΔE_saved × grid_CO₂) / RACF
 //   Input  = EFU_input(corrected)
 //           = EFU_input(direct) × (1 + (1 − JIM30/100) × D)
-//   MROI   = (Output / Input) × 100  [%]
+//   MROI   = (Output / Input − 1) × 100  [%]
 //
 // The JIM-30 correction penalises low-repairability systems by increasing the
 // effective biophysical input cost (infrastructure debt, entropy, supply chain
@@ -75,9 +75,9 @@ export function calculateMROI(params) {
     ? efu_input_corrected / efu_input_direct
     : 1;
 
-  // MROI = Output / Input × 100
+  // MROI = (Output / Input − 1) × 100
   const mroi = efu_input_corrected !== 0
-    ? (output_racf_units / efu_input_corrected) * 100
+    ? (output_racf_units / efu_input_corrected - 1) * 100
     : 0;
 
   return {

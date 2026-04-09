@@ -79,7 +79,7 @@ export const caseStudies = [
       racf: 526,
       jim30: 25,
       d_multiplier: 0.3,
-      efu_input_direct: 6.65,
+      efu_input_direct: 5.60,
     },
   },
   {
@@ -95,7 +95,7 @@ export const caseStudies = [
       racf: 526,
       jim30: 88,
       d_multiplier: 0.3,
-      efu_input_direct: 29.94,
+      efu_input_direct: 22.74,
     },
   },
   {
