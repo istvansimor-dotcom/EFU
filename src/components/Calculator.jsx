@@ -1,42 +1,12 @@
 import { useState, useEffect } from 'react';
 import caseStudies, { DEFAULT_D, RACF_DEFAULT } from '../data/caseStudies.js';
-
-/**
- * Classify MROI value into a threshold label.
- * Based on MROI Working Paper v1.3, §2.3
- */
-function classifyMROI(mroi) {
-  if (mroi > 25) return { label: 'SYMBIOTIC', color: '#16a34a', emoji: '✅' };
-  if (mroi >= 10) return { label: 'STABLE', color: '#2563eb', emoji: '🔵' };
-  if (mroi >= 0) return { label: 'LIMITED', color: '#d97706', emoji: '🟡' };
-  return { label: 'PARASITIC', color: '#dc2626', emoji: '🔴' };
-}
-
-/**
- * Calculate MROI from input parameters.
- *
- * Formula (MROI Working Paper v1.3, §2.1):
- *   MROI = (ΔE_saved × grid_CO₂ / RACF) / EFU_input(corrected) × 100
- *
- * JIM-30 correction (MROI Working Paper §2.2):
- *   EFU_input(corrected) = EFU_input(direct) × (1 + (1 – JIM30/100) × D)
- */
-function calculateMROI({ delta_e_saved, grid_co2, racf, jim30, d_multiplier, efu_input_direct }) {
-  const co2_reduction = delta_e_saved * grid_co2;
-  const racf_units = co2_reduction / racf;
-  const jim30_fraction = jim30 / 100;
-  const correction_multiplier = 1 + (1 - jim30_fraction) * d_multiplier;
-  const efu_input_corrected = efu_input_direct * correction_multiplier;
-  const mroi = efu_input_corrected !== 0 ? (racf_units / efu_input_corrected) * 100 : 0;
-  return {
-    co2_reduction: Math.round(co2_reduction),
-    racf_units: Math.round(racf_units * 100) / 100,
-    jim30_fraction,
-    correction_multiplier: Math.round(correction_multiplier * 1000) / 1000,
-    efu_input_corrected: Math.round(efu_input_corrected * 100) / 100,
-    mroi: Math.round(mroi * 10) / 10,
-  };
-}
+import {
+  calculateMROI,
+  calculateFLR,
+  detectParasitism,
+  classifyMROI,
+  FLR_PARASITISM_THRESHOLD,
+} from '../logic/efu-engine.js';
 
 const inputStyle = {
   width: '100%',
@@ -72,6 +42,7 @@ export default function Calculator() {
     efu_input_direct: 10,
   });
   const [result, setResult] = useState(null);
+  const [flrResult, setFlrResult] = useState(null);
 
   // When case study selection changes, load its params
   useEffect(() => {
@@ -86,8 +57,11 @@ export default function Calculator() {
     try {
       const r = calculateMROI(params);
       setResult(r);
+      const f = calculateFLR(params);
+      setFlrResult({ ...f, ...detectParasitism(f.flr) });
     } catch {
       setResult(null);
+      setFlrResult(null);
     }
   }, [params]);
 
@@ -250,7 +224,7 @@ export default function Calculator() {
             </div>
             <div>
               <div style={{ color: '#6b7280', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600' }}>RACF units</div>
-              <div style={{ fontWeight: '600' }}>{result.racf_units}</div>
+              <div style={{ fontWeight: '600' }}>{result.output_racf_units}</div>
             </div>
             <div>
               <div style={{ color: '#6b7280', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600' }}>Correction ×</div>
@@ -272,6 +246,71 @@ export default function Calculator() {
               EFU_input(corrected) = {params.efu_input_direct} × (1 + (1 − {params.jim30}/100) × {params.d_multiplier}) = {result.efu_input_corrected}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* FLR — Frictional Loss Rate + Parasitism Detection */}
+      {flrResult && (
+        <div
+          style={{
+            border: `2px solid ${flrResult.parasitism ? '#dc2626' : '#6b7280'}`,
+            borderRadius: '10px',
+            padding: '18px',
+            background: flrResult.parasitism ? '#fef2f2' : '#f9fafb',
+            marginBottom: '24px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+            <span style={{ fontWeight: '700', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#374151' }}>
+              ⚡ FLR — Frictional Loss Rate
+            </span>
+            <span
+              style={{
+                background: flrResult.parasitism ? '#dc2626' : '#6b7280',
+                color: 'white',
+                padding: '3px 10px',
+                borderRadius: '20px',
+                fontWeight: '700',
+                fontSize: '12px',
+              }}
+            >
+              {flrResult.parasitism ? '⚠️ ' : '✔ '}{flrResult.status}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', fontSize: '13px', marginBottom: '12px' }}>
+            <div>
+              <div style={{ color: '#6b7280', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600' }}>FLR</div>
+              <div style={{ fontWeight: '700', fontSize: '18px', color: flrResult.parasitism ? '#dc2626' : '#374151' }}>
+                {flrResult.flr}%
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#6b7280', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600' }}>Threshold</div>
+              <div style={{ fontWeight: '600' }}>{FLR_PARASITISM_THRESHOLD}%</div>
+            </div>
+            <div>
+              <div style={{ color: '#6b7280', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600' }}>Friction overhead</div>
+              <div style={{ fontWeight: '600' }}>{flrResult.friction} EFU units</div>
+            </div>
+            <div>
+              <div style={{ color: '#6b7280', fontSize: '11px', textTransform: 'uppercase', fontWeight: '600' }}>EFU_input corrected</div>
+              <div style={{ fontWeight: '600' }}>{flrResult.efu_input_corrected}</div>
+            </div>
+          </div>
+
+          <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#6b7280', background: 'white', padding: '8px 12px', borderRadius: '6px', lineHeight: '1.8' }}>
+            <div>FLR = (EFU_input(corrected) − EFU_input(direct)) / EFU_input(corrected) × 100</div>
+            <div>= ({flrResult.efu_input_corrected} − {params.efu_input_direct}) / {flrResult.efu_input_corrected} × 100 = {flrResult.flr}%</div>
+          </div>
+
+          {flrResult.parasitism && (
+            <div style={{ marginTop: '10px', fontSize: '12px', color: '#991b1b', fontWeight: '600' }}>
+              ⚠️ FLR &gt; {FLR_PARASITISM_THRESHOLD}% — Infrastructure debt friction exceeds the metabolic parasitism threshold.
+              Low repairability (JIM-30 = {params.jim30}) amplifies systemic entropy costs.
+              Recommendation: increase JIM-30 score or reduce D multiplier.
+            </div>
+          )}
         </div>
       )}
 
