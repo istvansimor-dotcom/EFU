@@ -20,6 +20,7 @@ import HobbyAnimal600Panel from './HobbyAnimal600Panel.jsx';
 import MVP600Panel from './MVP600Panel.jsx';
 import Entertainment600Panel from './Entertainment600Panel.jsx';
 import ReligiousFlux600Panel from './ReligiousFlux600Panel.jsx';
+import CdsPanel from './CdsPanel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -566,6 +567,9 @@ export default function Calculator() {
 
       {/* EFU 600.82 — Vallási Identitás Antiflux v1.0 */}
       <ReligiousFlux600Panel />
+
+      {/* EFU 900.1 CDS / 900.2 CDP — Integrációs Panel (Sprint 2) */}
+      <CdsPanel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>

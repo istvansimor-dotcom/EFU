@@ -42,7 +42,11 @@ export const CDS_API_CONFIG = {
   timeoutMs: 8000,
   maxRetries: 3,
   retryDelayMs: 1000,
-  useMock: true,  // Sprint 1: mindig mock mód; valós API elérhetővé válásakor: false
+  // useMock: true ha sem CDS sem CDP URL nincs beállítva; false ha bármelyik konfigurálva van.
+  useMock: !(
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CDS_API_URL) ||
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CDP_API_URL)
+  ),
 };
 
 // ---------------------------------------------------------------------------
