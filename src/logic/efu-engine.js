@@ -857,3 +857,102 @@ export function classifyCEWSSynergyState({ p_syn, n_cogn, efm_fixed = false, eta
   };
   return { state, ...STATES[state], eta_critical };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.52 AM-DPI — Audit Mátrix ↔ 600.7 Detekciós Protokoll Integráció
+// Reference: EFU 600.52 AM-DPI v1.0 (2026.04.10)
+// ---------------------------------------------------------------------------
+
+/**
+ * AM-DPI.6 — Automatikus eszkalációs logika.
+ *
+ * A legmagasabb aktivált detekciós szint és a küszöböt túllépő indikátorok
+ * száma alapján dönt SBE-Watch / SBE-Probable / SBE-Confirmed között.
+ *
+ * @param {Array<{threshold_exceeded: boolean, detection_level_triggered: number}>} indicators
+ * @returns {'SBE-Watch'|'SBE-Probable'|'SBE-Confirmed'}
+ */
+export function escalateAMDPIClassification(indicators) {
+  if (!indicators || indicators.length === 0) return 'SBE-Watch';
+
+  const maxLevel   = Math.max(...indicators.map((i) => i.detection_level_triggered));
+  const exceeded   = indicators.filter((i) => i.threshold_exceeded);
+
+  if (maxLevel >= 4) return 'SBE-Confirmed';
+  if (maxLevel === 3 && exceeded.length >= 1) return 'SBE-Probable';
+  if (maxLevel === 2) return 'SBE-Watch';
+  return 'SBE-Watch';
+}
+
+/**
+ * AM-DPI.6 — Végső SBE-klasszifikáció CFI-B alapján.
+ *
+ * @param {'SBE-Watch'|'SBE-Probable'|'SBE-Confirmed'} matrixClass
+ * @param {number} cfibTotal
+ * @returns {{ finalClass: string, tierStatus: string }}
+ */
+export function finalAMDPIClassification(matrixClass, cfibTotal) {
+  if (cfibTotal > 300) return { finalClass: 'SBE-Confirmed', tierStatus: 'TIER_1_VISSZAVONVA' };
+  if (cfibTotal > 100) return { finalClass: 'SBE-Confirmed', tierStatus: 'FORRAS_KARANTENBE' };
+  return { finalClass: matrixClass, tierStatus: 'NO_TIER' };
+}
+
+/**
+ * AM-DPI — Teljes integrált pipeline futtatása.
+ *
+ * Bemenet: AUDIT_INDICATORS-ből jövő readings objekt + mért értékek + cfibTotal.
+ *
+ * @param {{ p_lod_water?: number, p_lod_blood?: number, b_acc?: number,
+ *            i_block?: number, afff_rad?: number, c_chain?: number }} readings
+ * @param {number} cfibTotal - összesített CFI-B érték
+ * @returns {{ indicators: Array, matrixSummary: object }}
+ */
+export function runAMDPIIntegration(readings = {}, cfibTotal = 0) {
+  const {
+    p_lod_water = 0,
+    p_lod_blood = 0,
+    b_acc       = 0,
+    i_block     = 0,
+    afff_rad    = 0,
+    c_chain     = 0,
+  } = readings;
+
+  const raw = [
+    { indicator_id: 'P-LOD',    value: p_lod_water, unit: 'ng/L',   threshold: 100, detection_level_triggered: 2 },
+    { indicator_id: 'P-LOD²',   value: p_lod_blood, unit: 'ng/mL',  threshold: 20,  detection_level_triggered: 3 },
+    { indicator_id: 'B-ACC',    value: b_acc,        unit: '%/év',   threshold: 10,  detection_level_triggered: 2 },
+    { indicator_id: 'I-BLOCK',  value: i_block,      unit: '%',      threshold: 15,  detection_level_triggered: 3 },
+    { indicator_id: 'AFFF-RAD', value: afff_rad,     unit: 'm',      threshold: 500, detection_level_triggered: 1 },
+    { indicator_id: 'C-CHAIN',  value: c_chain,      unit: 'ng/g',   threshold: 11,  detection_level_triggered: 3 },
+  ];
+
+  const indicators = raw.map((ind) => {
+    const exceeded = ind.value > ind.threshold;
+    const baseClass = (() => {
+      if (!exceeded) return 'SBE-Watch';
+      if (ind.detection_level_triggered >= 3) return 'SBE-Probable';
+      return 'SBE-Watch';
+    })();
+    return { ...ind, threshold_exceeded: exceeded, sbe_classification: baseClass };
+  });
+
+  const matrixClass = escalateAMDPIClassification(indicators);
+  const { finalClass, tierStatus } = finalAMDPIClassification(matrixClass, cfibTotal);
+
+  const exceededCount = indicators.filter((i) => i.threshold_exceeded).length;
+  const maxLevel      = Math.max(...indicators.map((i) => i.detection_level_triggered));
+
+  const matrixSummary = {
+    indicators_total:        indicators.length,
+    thresholds_exceeded:     exceededCount,
+    max_detection_level:     maxLevel,
+    dominant_classification: matrixClass,
+    cfib_escalation:         cfibTotal > 100,
+    final_classification:    finalClass,
+    tier:                    tierStatus,
+    cews_flag:               finalClass === 'SBE-Confirmed' || matrixClass === 'SBE-Probable',
+    fire_chief_notify:       tierStatus === 'TIER_1_VISSZAVONVA',
+  };
+
+  return { indicators, matrixSummary };
+}

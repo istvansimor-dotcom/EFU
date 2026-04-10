@@ -27,11 +27,17 @@ import {
   INTERVENTION_PROTOCOL,
   PLANETARY_SCALE,
   INTERSTITIAL_METRICS,
+  AM_DPI_INDICATORS,
+  AM_DPI_DETECTION_LEVELS,
+  AM_DPI_FEEDBACK_TABLE,
+  AM_DPI_JSON_SCHEMA_FIELDS,
+  AM_DPI_MATRIX_SUMMARY_FIELDS,
 } from '../data/pfas600_52.js';
 import {
   calculateCFIB,
   classifyPFASAudit,
   calculateHealingEfficiency,
+  runAMDPIIntegration,
 } from '../logic/efu-engine.js';
 
 // ---------------------------------------------------------------------------
@@ -449,6 +455,259 @@ function PlanetaryScale() {
 }
 
 // ---------------------------------------------------------------------------
+// AM-DPI Panel — Audit Mátrix ↔ 600.7 Detekciós Protokoll Integráció
+// ---------------------------------------------------------------------------
+
+const CLASS_COLORS = {
+  'SBE-Watch':     '#ca8a04',
+  'SBE-Probable':  '#ea580c',
+  'SBE-Confirmed': '#dc2626',
+};
+
+const TIER_COLORS = {
+  TIER_1_VISSZAVONVA: '#dc2626',
+  FORRAS_KARANTENBE:  '#ea580c',
+  NO_TIER:            '#6b7280',
+};
+
+function AMDPIPanel() {
+  const defaults = { p_lod_water: 85, p_lod_blood: 18, b_acc: 8, i_block: 12, afff_rad: 600, c_chain: 9 };
+  const [readings, setReadings]   = useState(defaults);
+  const [cfibTotal, setCfibTotal] = useState(0);
+  const set = (key, val) => setReadings((r) => ({ ...r, [key]: val }));
+
+  const { indicators, matrixSummary } = useMemo(
+    () => runAMDPIIntegration(readings, cfibTotal),
+    [readings, cfibTotal],
+  );
+
+  const finalColor  = CLASS_COLORS[matrixSummary.final_classification] || '#6b7280';
+  const tierColor   = TIER_COLORS[matrixSummary.tier] || '#6b7280';
+  const maxLevel    = matrixSummary.max_detection_level;
+
+  return (
+    <SectionBox accentColor="#0891b2" title="🔗 600.52 AM-DPI — Audit Mátrix ↔ 600.7 Detekciós Protokoll Integráció">
+      {/* AM-DPI.1 Integráció célja */}
+      <div style={{ background: '#e0f2fe', border: '1px solid #0891b2', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#075985', lineHeight: '1.7' }}>
+        <strong>AM-DPI célja:</strong> Kétirányú kapcsolat az Audit Mátrix indikátorok és a 600.7 SBE detekciós rendszer között.
+        Minden küszöbérték-túllépés automatikusan elindítja a megfelelő 600.7 detekciós szintet,
+        és minden 600.7 besorolás visszaíródik az Audit Mátrixba.
+      </div>
+
+      {/* Live inputs */}
+      <div style={{ fontWeight: '700', fontSize: '12px', color: '#374151', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        Mért értékek megadása
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px', marginBottom: '14px' }}>
+        {AM_DPI_INDICATORS.map((ind) => {
+          const key = ind.id.toLowerCase();
+          const readingKey = key === 'p_lod_blood' ? 'p_lod_blood' : key === 'p_lod_water' ? 'p_lod_water' :
+            key === 'b_acc' ? 'b_acc' : key === 'i_block' ? 'i_block' :
+            key === 'afff_rad' ? 'afff_rad' : 'c_chain';
+          const val = readings[readingKey] ?? 0;
+          const exceeded = val > ind.threshold;
+          return (
+            <div key={ind.id} style={{ border: `1px solid ${exceeded ? '#fca5a5' : '#e5e7eb'}`, borderRadius: '7px', padding: '8px 10px', background: exceeded ? '#fef2f2' : '#f9fafb' }}>
+              <div style={{ fontWeight: '700', fontSize: '11px', color: exceeded ? '#dc2626' : '#374151', marginBottom: '3px' }}>
+                {ind.code} {exceeded ? '⚠' : ''}
+              </div>
+              <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '4px' }}>{ind.label}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <NumInput value={val} step={ind.unit === 'm' ? 10 : 1} onChange={(v) => set(readingKey, v)} />
+                <span style={{ fontSize: '10px', color: '#9ca3af' }}>{ind.unit}</span>
+              </div>
+              <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>küszöb: {ind.threshold} {ind.unit}</div>
+            </div>
+          );
+        })}
+        <div style={{ border: '1px solid #a78bfa', borderRadius: '7px', padding: '8px 10px', background: '#faf5ff' }}>
+          <div style={{ fontWeight: '700', fontSize: '11px', color: '#7c3aed', marginBottom: '3px' }}>CFI-B összeg</div>
+          <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '4px' }}>Eszkaláció alap</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <NumInput value={cfibTotal} step={10} onChange={setCfibTotal} />
+            <span style={{ fontSize: '10px', color: '#9ca3af' }}>pont</span>
+          </div>
+          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>&gt;100 karantén / &gt;300 TIER 1</div>
+        </div>
+      </div>
+
+      {/* AM-DPI.2 Indikátor táblázat */}
+      <div style={{ fontWeight: '700', fontSize: '12px', color: '#374151', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        AM-DPI.2 — Indikátorok → 600.7 szint leképezés
+      </div>
+      <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+          <thead>
+            <tr style={{ background: '#f0f9ff' }}>
+              {['Indikátor', 'Mért érték', 'Küszöb', 'Túllépve?', '600.7 szint', 'SBE besorolás'].map((h) => (
+                <th key={h} style={{ padding: '6px 8px', border: '1px solid #bae6fd', textAlign: 'left', color: '#0369a1', fontWeight: '700' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {indicators.map((ind) => (
+              <tr key={ind.indicator_id} style={{ background: ind.threshold_exceeded ? '#fef2f2' : '#f9fafb' }}>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb', fontWeight: '700', color: '#111827' }}>{ind.indicator_id}</td>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb', color: '#374151' }}>{ind.value} {ind.unit}</td>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb', color: '#374151' }}>&gt; {ind.threshold} {ind.unit}</td>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb', fontWeight: '700',
+                    color: ind.threshold_exceeded ? '#dc2626' : '#16a34a' }}>
+                  {ind.threshold_exceeded ? '✗ IGEN' : '✓ NEM'}
+                </td>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb' }}>
+                  <span style={{ background: AM_DPI_DETECTION_LEVELS[ind.detection_level_triggered - 1]?.bgColor,
+                      color: AM_DPI_DETECTION_LEVELS[ind.detection_level_triggered - 1]?.color,
+                      border: `1px solid ${AM_DPI_DETECTION_LEVELS[ind.detection_level_triggered - 1]?.borderColor}`,
+                      borderRadius: '4px', padding: '1px 6px', fontWeight: '700', fontSize: '10px' }}>
+                    {ind.detection_level_triggered}. szint
+                  </span>
+                </td>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb', fontWeight: '700',
+                    color: CLASS_COLORS[ind.sbe_classification] || '#6b7280' }}>
+                  {ind.sbe_classification}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* AM-DPI.3 Detekciós pipeline */}
+      <div style={{ fontWeight: '700', fontSize: '12px', color: '#374151', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        AM-DPI.3 — 600.7 Detekciós folyamat
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+        {AM_DPI_DETECTION_LEVELS.map((lvl) => {
+          const active = maxLevel >= lvl.level && indicators.some(
+            (i) => i.threshold_exceeded && i.detection_level_triggered === lvl.level,
+          );
+          return (
+            <div key={lvl.level} style={{
+              border: `2px solid ${active ? lvl.color : '#d1d5db'}`,
+              borderRadius: '8px',
+              padding: '10px 14px',
+              background: active ? lvl.bgColor : '#f9fafb',
+              opacity: active ? 1 : 0.65,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ background: active ? lvl.color : '#9ca3af', color: '#fff',
+                    borderRadius: '50%', width: '20px', height: '20px', display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '800', flexShrink: 0 }}>
+                  {lvl.level}
+                </span>
+                <span style={{ fontWeight: '800', fontSize: '12px', color: active ? lvl.color : '#6b7280' }}>
+                  {lvl.label}
+                </span>
+                {active && <span style={{ fontSize: '10px', background: lvl.color, color: '#fff', borderRadius: '4px', padding: '1px 6px', fontWeight: '700' }}>AKTÍV</span>}
+              </div>
+              <div style={{ fontSize: '11px', color: '#4b5563', marginLeft: '28px' }}>
+                {lvl.criteria.map((c) => <div key={c}>• {c}</div>)}
+                <div style={{ fontWeight: '700', marginTop: '3px', color: active ? lvl.color : '#9ca3af' }}>
+                  → {lvl.result}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* AM-DPI.4 Összesítés + végső besorolás */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+        {[
+          { label: 'Indikátorok', val: matrixSummary.indicators_total, color: '#374151' },
+          { label: 'Túllépett küszöbök', val: matrixSummary.thresholds_exceeded, color: matrixSummary.thresholds_exceeded > 0 ? '#dc2626' : '#16a34a' },
+          { label: 'Max detekciós szint', val: `${matrixSummary.max_detection_level}. szint`, color: '#0891b2' },
+          { label: 'Domináns SBE', val: matrixSummary.dominant_classification, color: CLASS_COLORS[matrixSummary.dominant_classification] || '#6b7280' },
+          { label: 'Végső SBE', val: matrixSummary.final_classification, color: finalColor },
+          { label: 'TIER státusz', val: matrixSummary.tier.replace(/_/g, ' '), color: tierColor },
+        ].map(({ label, val, color }) => (
+          <div key={label} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px', background: '#fff', textAlign: 'center' }}>
+            <div style={{ fontSize: '10px', color: '#9ca3af', marginBottom: '4px', textTransform: 'uppercase' }}>{label}</div>
+            <div style={{ fontSize: '13px', fontWeight: '800', color }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* CEWS flag + Fire Chief */}
+      {(matrixSummary.cews_flag || matrixSummary.fire_chief_notify) && (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
+          {matrixSummary.cews_flag && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#dc2626', fontWeight: '700' }}>
+              🚨 CEWS FLAG AKTIVÁLVA
+            </div>
+          )}
+          {matrixSummary.fire_chief_notify && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#dc2626', fontWeight: '700' }}>
+              🔥 FIRE CHIEF ÉRTESÍTÉS SZÜKSÉGES
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AM-DPI.4 Kétirányú visszacsatolás */}
+      <div style={{ fontWeight: '700', fontSize: '12px', color: '#374151', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        AM-DPI.4 — Kétirányú visszacsatolás
+      </div>
+      <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+          <thead>
+            <tr style={{ background: '#f0f9ff' }}>
+              {['600.7 besorolás', 'Audit Mátrix státusz', 'TIER'].map((h) => (
+                <th key={h} style={{ padding: '6px 8px', border: '1px solid #bae6fd', textAlign: 'left', color: '#0369a1', fontWeight: '700' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {AM_DPI_FEEDBACK_TABLE.map((row) => (
+              <tr key={row.classification} style={{ background: matrixSummary.final_classification === row.classification ? '#fef2f2' : '#f9fafb' }}>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb', fontWeight: '700', color: row.color }}>
+                  {matrixSummary.final_classification === row.classification ? '▶ ' : ''}{row.classification}
+                </td>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb', color: '#374151' }}>{row.audit_status}</td>
+                <td style={{ padding: '5px 8px', border: '1px solid #e5e7eb', fontWeight: '700', color: row.tier !== '—' ? '#dc2626' : '#9ca3af' }}>{row.tier}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* AM-DPI.5 JSON séma */}
+      <div style={{ fontWeight: '700', fontSize: '12px', color: '#374151', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        AM-DPI.5 — JSON séma mezők
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '6px', marginBottom: '12px' }}>
+        {AM_DPI_JSON_SCHEMA_FIELDS.map((f) => (
+          <div key={f.field} style={{ border: '1px solid #e5e7eb', borderRadius: '6px', padding: '6px 10px', background: '#f9fafb', fontSize: '11px' }}>
+            <span style={{ fontFamily: 'monospace', fontWeight: '700', color: '#0891b2', marginRight: '6px' }}>{f.field}</span>
+            <span style={{ color: '#6b7280', fontSize: '10px' }}>({f.type})</span>
+            <div style={{ color: '#4b5563', marginTop: '2px' }}>{f.desc}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontWeight: '700', fontSize: '11px', color: '#374151', marginBottom: '6px' }}>matrix_summary mezők:</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '6px', marginBottom: '14px' }}>
+        {AM_DPI_MATRIX_SUMMARY_FIELDS.map((f) => (
+          <div key={f.field} style={{ border: '1px solid #dbeafe', borderRadius: '6px', padding: '6px 10px', background: '#eff6ff', fontSize: '11px' }}>
+            <span style={{ fontFamily: 'monospace', fontWeight: '700', color: '#1d4ed8', marginRight: '6px' }}>{f.field}</span>
+            <div style={{ color: '#374151', marginTop: '2px' }}>{f.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* AM-DPI.7 Rendszer hierarchia */}
+      <div style={{ background: '#f5f3ff', border: '1px solid #a78bfa', borderRadius: '8px', padding: '10px 14px', fontSize: '11px', color: '#4c1d95', lineHeight: '1.8' }}>
+        <strong>AM-DPI.7 — Teljes integrált rendszer hierarchia:</strong><br />
+        205.3 (Alap JSON séma) → 600.9 MVD (SBE monitoring) → 600.52 CFI-B (kalkulációs réteg) →
+        600.52 AM-DPI (Audit Mátrix ↔ 600.7 integráció)<br />
+        <span style={{ fontSize: '10px', color: '#6d28d9' }}>
+          6 indikátor → detekciós szintekhez kötve · Kétirányú visszacsatolás · Automatikus eszkaláció · Végső SBE osztályozás + TIER státusz
+        </span>
+      </div>
+    </SectionBox>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main PFAS600Panel
 // ---------------------------------------------------------------------------
 
@@ -511,6 +770,9 @@ export default function PFAS600Panel() {
       <SectionBox title="HU Pilot Régió Monitoring — Audit Mátrix (§4.1, 900.5 Dashboard)" icon="📊" accentColor="#dc262640">
         <AuditMatrix />
       </SectionBox>
+
+      {/* AM-DPI Integration */}
+      <AMDPIPanel />
 
       {/* Hospital connection */}
       <SectionBox title="Kórházi Kapcsolódás (104.13.3) — η_heal Kalkulátor" icon="🏥" accentColor="#be185d40">

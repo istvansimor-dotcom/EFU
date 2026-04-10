@@ -262,3 +262,206 @@ export const INTERSTITIAL_METRICS = [
   { id: 'FLUX_SLOW', label: 'Proteoglikán-kötés',      mechanism: 'ECM struktúra torzul',          unit: 'Fluxus-lassulás' },
   { id: 'MROI_ATP',  label: 'Mitokondriális toxicitás', mechanism: 'ATP-termelés csökken',          unit: 'MROI' },
 ];
+
+// ---------------------------------------------------------------------------
+// AM-DPI — Audit Mátrix ↔ 600.7 Detekciós Protokoll Integráció (§3.1–3.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * AM-DPI.2 — Indikátorok leképezése 600.7 detekciós szintekre.
+ * Minden indikátorhoz megadjuk: küszöb, aktivált detekciós szint, belső SBE besorolás.
+ */
+export const AM_DPI_INDICATORS = [
+  {
+    id:               'P_LOD_WATER',
+    code:             'P-LOD',
+    label:            'PFAS terhelési arány (ivóvíz)',
+    unit:             'ng/L',
+    threshold:        100,
+    detection_level:  2,
+    sbe_classification: 'SBE-Probable',
+    internal_class:   'SBE Watch → Valószínű',
+    efu_penalty:      150,
+    w_irrev_delta:    null,
+    api_multiplier:   null,
+    zone_alert:       false,
+    ecosystem_audit:  false,
+  },
+  {
+    id:               'P_LOD_BLOOD',
+    code:             'P-LOD²',
+    label:            'PFAS vérszérum',
+    unit:             'ng/mL',
+    threshold:        20,
+    detection_level:  3,
+    sbe_classification: 'SBE-Probable',
+    internal_class:   'SBE Valószínű → Megerősített',
+    efu_penalty:      300,
+    w_irrev_delta:    null,
+    api_multiplier:   null,
+    zone_alert:       false,
+    ecosystem_audit:  false,
+  },
+  {
+    id:               'B_ACC',
+    code:             'B-ACC',
+    label:            'Bioakkumuláció',
+    unit:             '%/év',
+    threshold:        10,
+    detection_level:  2,
+    sbe_classification: 'SBE-Watch',
+    internal_class:   'SBE Watch → Valószínű',
+    efu_penalty:      null,
+    w_irrev_delta:    0.05,
+    api_multiplier:   null,
+    zone_alert:       false,
+    ecosystem_audit:  false,
+  },
+  {
+    id:               'I_BLOCK',
+    code:             'I-BLOCK',
+    label:            'Interstitiális blokád',
+    unit:             '%',
+    threshold:        15,
+    detection_level:  3,
+    sbe_classification: 'SBE-Probable',
+    internal_class:   'SBE Valószínű',
+    efu_penalty:      null,
+    w_irrev_delta:    null,
+    api_multiplier:   1.2,
+    zone_alert:       false,
+    ecosystem_audit:  false,
+  },
+  {
+    id:               'AFFF_RAD',
+    code:             'AFFF-RAD',
+    label:            'Tűzoltótelep-sugár',
+    unit:             'm',
+    threshold:        500,
+    detection_level:  1,
+    sbe_classification: 'SBE-Watch',
+    internal_class:   'SBE Watch',
+    efu_penalty:      null,
+    w_irrev_delta:    null,
+    api_multiplier:   null,
+    zone_alert:       true,
+    ecosystem_audit:  false,
+  },
+  {
+    id:               'C_CHAIN',
+    code:             'C-CHAIN',
+    label:            'Tápláléklánc (hal)',
+    unit:             'ng/g',
+    threshold:        11,
+    detection_level:  3,
+    sbe_classification: 'SBE-Probable',
+    internal_class:   'SBE Valószínű → Megerősített',
+    efu_penalty:      null,
+    w_irrev_delta:    null,
+    api_multiplier:   null,
+    zone_alert:       false,
+    ecosystem_audit:  true,
+  },
+];
+
+/**
+ * AM-DPI.3 — 600.7 Detekciós szintek leírása.
+ */
+export const AM_DPI_DETECTION_LEVELS = [
+  {
+    level:       1,
+    label:       '1. szint – Előszűrés',
+    color:       '#ca8a04',
+    bgColor:     '#fefce8',
+    borderColor: '#fbbf24',
+    description: 'Alapszintű jelenlét ellenőrzés',
+    criteria:    ['AFFF-RAD > 500 m?', 'Van természetes analóg?', 'Ismert mikrobiális lebomlás?'],
+    result:      'Ha mindhárom NEM → TSSM előjelölés',
+    trigger_msg: 'TSSM elő jelölés',
+  },
+  {
+    level:       2,
+    label:       '2. szint – Kritérium ellenőrzés',
+    color:       '#ea580c',
+    bgColor:     '#fff7ed',
+    borderColor: '#fb923c',
+    description: 'Küszöbérték alapú szűrés',
+    criteria:    ['P-LOD (víz) > 100 ng/L?', 'B-ACC > 10%/év?', 'BAF > 1?'],
+    result:      'Ha igen → SBE Valószínű',
+    trigger_msg: 'SBE Valószínű',
+  },
+  {
+    level:       3,
+    label:       '3. szint – Rendszerszintű vizsgálat',
+    color:       '#dc2626',
+    bgColor:     '#fef2f2',
+    borderColor: '#f87171',
+    description: 'Mélyebb rendszerszintű elemzés',
+    criteria:    ['P-LOD² (vér) > 20 ng/mL?', 'I-BLOCK > 15%?', 'C-CHAIN > 11 ng/g?', 'Szinergikus hatások?'],
+    result:      'SBE Valószínű megerősítve',
+    trigger_msg: 'SBE Valószínű → Megerősített',
+  },
+  {
+    level:       4,
+    label:       '4. szint – SBE osztályozás',
+    color:       '#7c3aed',
+    bgColor:     '#faf5ff',
+    borderColor: '#c084fc',
+    description: 'Végső SBE-besorolás és TIER státusz',
+    criteria:    ['CFI-B > 300 → SBE Megerősített', 'CFI-B > 600 → SBE Megerősített P1'],
+    result:      'TIER besorolás véglegesítve',
+    trigger_msg: 'SBE Megerősített / P1',
+  },
+];
+
+/**
+ * AM-DPI.4 — Kétirányú visszacsatolás táblázat.
+ */
+export const AM_DPI_FEEDBACK_TABLE = [
+  {
+    classification: 'SBE Watch',
+    audit_status:   'Monitoring aktív',
+    tier:           '—',
+    color:          '#ca8a04',
+  },
+  {
+    classification: 'SBE Probable',
+    audit_status:   'Kritérium ellenőrzés folyamatban',
+    tier:           '—',
+    color:          '#ea580c',
+  },
+  {
+    classification: 'SBE Confirmed',
+    audit_status:   'Forrás karantén / TIER 1 visszavonás',
+    tier:           'TIER 1–2',
+    color:          '#dc2626',
+  },
+];
+
+/**
+ * AM-DPI.5 — JSON séma mezőleírás.
+ */
+export const AM_DPI_JSON_SCHEMA_FIELDS = [
+  { field: 'indicator_id',              type: 'string',  desc: 'Indikátor azonosító (pl. "P-LOD")' },
+  { field: 'value',                     type: 'number',  desc: 'Mért érték' },
+  { field: 'unit',                      type: 'string',  desc: 'Mértékegység' },
+  { field: 'threshold',                 type: 'number',  desc: 'Küszöbérték' },
+  { field: 'threshold_exceeded',        type: 'boolean', desc: 'Küszöb túllépve? (true/false)' },
+  { field: 'detection_level_triggered', type: 'integer', desc: 'Aktivált 600.7 szint (1–4)' },
+  { field: 'sbe_classification',        type: 'string',  desc: 'Aktuális SBE besorolás' },
+  { field: 'efu_penalty',               type: 'number',  desc: 'EFU-pontszám következmény (EFU/fő)' },
+  { field: 'w_irrev_delta',             type: 'number',  desc: 'Visszafordíthatatlansági mutató módosítás' },
+  { field: 'api_multiplier',            type: 'number',  desc: 'API szorzó (pl. ×1.2)' },
+  { field: 'zone_alert',                type: 'boolean', desc: 'Zóna-riasztás aktiválva?' },
+  { field: 'ecosystem_audit_triggered', type: 'boolean', desc: 'Ökoszisztéma audit elindítva?' },
+];
+
+export const AM_DPI_MATRIX_SUMMARY_FIELDS = [
+  { field: 'indicators_total',     desc: 'Indikátorok száma' },
+  { field: 'thresholds_exceeded',  desc: 'Túllépett küszöbök száma' },
+  { field: 'max_detection_level',  desc: 'Elért legmagasabb detekciós szint' },
+  { field: 'dominant_classification', desc: 'Domináns SBE besorolás' },
+  { field: 'cfib_escalation',      desc: 'Történt-e CFI-B alapú eszkaláció?' },
+  { field: 'final_classification', desc: 'Végső SBE osztályozás' },
+  { field: 'tier',                 desc: 'TIER státusz (pl. "TIER_1_VISSZAVONVA")' },
+];
