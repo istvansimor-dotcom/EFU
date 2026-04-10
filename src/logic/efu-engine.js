@@ -1433,3 +1433,323 @@ export function calculateHAP(inputs = {}) {
     variables: { raw: vars, weights },
   };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.10 — Monitoring és Verifikáció (MVP) v1.0
+// Reference: EFU 600.10 MVP v1.0 (2026-04-10)
+// ---------------------------------------------------------------------------
+
+/**
+ * Zóna klasszifikáció az MVP érték alapján.
+ * 5 zóna: GREEN / YELLOW / ORANGE / RED / CRITICAL
+ *
+ * @param {number} mvp
+ * @returns {{ id: string, label: string, status: string, color: string, action: string }}
+ */
+export function classifyMVPZone(mvp) {
+  if (mvp >= 1.5) return { id: 'CRITICAL', label: '⚫ Kritikus',   status: 'AUDITÁLT',   color: '#111827', action: '900.1 CDS rendszeraudit' };
+  if (mvp >= 1.0) return { id: 'RED',      label: '🔴 Piros',     status: 'SBE-WATCH',  color: '#dc2626', action: 'Automatikus SBE-Watch besorolás' };
+  if (mvp >= 0.7) return { id: 'ORANGE',   label: '🟠 Narancs',   status: 'HIÁNYOS',    color: '#ea580c', action: 'SBE-Watch kockázat' };
+  if (mvp >= 0.4) return { id: 'YELLOW',   label: '🟡 Sárga',     status: 'REVIEW',     color: '#ca8a04', action: 'Felülvizsgálat szükséges' };
+  return               { id: 'GREEN',    label: '🟢 Operatív',  status: 'WATCH',      color: '#16a34a', action: 'Folyamatos monitorozás' };
+}
+
+/**
+ * MVP trigger logika kiértékelése.
+ *
+ * @param {number} mvp
+ * @param {{ L1_mol: number, L2_eco: number, L3_gov: number, V_ind: number, V_pub: number, Phi: number }} vars
+ * @returns {{ data_gap: boolean, independence_fail: boolean, cews_disconnect: boolean,
+ *             system_audit: boolean, active_triggers: string[] }}
+ */
+export function evaluateMVPTriggers(mvp, vars) {
+  const data_gap         = vars.L1_mol < 0.3 || vars.L2_eco < 0.3;
+  const independence_fail = vars.V_ind < 0.4;
+  const cews_disconnect  = vars.Phi < 100 && (vars.L1_mol < 0.5 || vars.L3_gov < 0.4);
+  const system_audit     = mvp >= 1.5 || (vars.V_ind < 0.3 && vars.V_pub < 0.3);
+
+  const active_triggers = [];
+  if (data_gap)          active_triggers.push('data_gap');
+  if (independence_fail) active_triggers.push('independence_fail');
+  if (cews_disconnect)   active_triggers.push('cews_disconnect');
+  if (system_audit)      active_triggers.push('system_audit');
+
+  return { data_gap, independence_fail, cews_disconnect, system_audit, active_triggers };
+}
+
+/**
+ * Főmodell: Monitoring and Verification Protocol Index (MVP)
+ *
+ * Formula:
+ *   MVP = (L1_mol×0.30 + L2_eco×0.30 + L3_gov×0.25 + V_ind×0.05 + V_rep×0.05 + V_pub×0.05) × S × (1 + Phi/1000)
+ *
+ * @param {{ L1_mol?: number, L2_eco?: number, L3_gov?: number, V_ind?: number,
+ *            V_rep?: number, V_pub?: number, S?: number, Phi?: number }} inputs
+ * @returns {{ mvp_index: number, zone: object, triggers: object,
+ *             variable_contributions: object, diagnostics: object, variables: object }}
+ */
+export function calculateMVP(inputs = {}) {
+  const defaults = { L1_mol: 0.6, L2_eco: 0.5, L3_gov: 0.45, V_ind: 0.6, V_rep: 0.65, V_pub: 0.5, S: 1.1, Phi: 200 };
+  const weights  = { L1_mol: 0.30, L2_eco: 0.30, L3_gov: 0.25, V_ind: 0.05, V_rep: 0.05, V_pub: 0.05 };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  const base =
+    vars.L1_mol * weights.L1_mol +
+    vars.L2_eco * weights.L2_eco +
+    vars.L3_gov * weights.L3_gov +
+    vars.V_ind  * weights.V_ind  +
+    vars.V_rep  * weights.V_rep  +
+    vars.V_pub  * weights.V_pub;
+
+  const phi_effect = 1 + vars.Phi / 1000;
+  const mvp = base * vars.S * phi_effect;
+
+  const zone     = classifyMVPZone(mvp);
+  const triggers = evaluateMVPTriggers(mvp, vars);
+
+  const variable_contributions = {};
+  for (const [k, w] of Object.entries(weights)) {
+    variable_contributions[k] = parseFloat((vars[k] * w).toFixed(4));
+  }
+
+  return {
+    mvp_index: parseFloat(mvp.toFixed(4)),
+    zone,
+    triggers,
+    variable_contributions,
+    diagnostics: {
+      base_index:     parseFloat(base.toFixed(4)),
+      phi_effect:     parseFloat(phi_effect.toFixed(4)),
+      synergy:        vars.S,
+      missing_inputs: missing,
+      confidence:     parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars, weights },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// EFU 600.20 — Szórakoztatóipar Dopamin Extrakció (DEP) v1.0
+// Reference: EFU 600.20 DEP v1.0 (2026-04-10)
+// ---------------------------------------------------------------------------
+
+/**
+ * Zóna klasszifikáció a DEP érték alapján.
+ * 5 zóna: GREEN / YELLOW / ORANGE / RED / CRITICAL
+ *
+ * @param {number} dep
+ * @returns {{ id: string, label: string, status: string, color: string, action: string }}
+ */
+export function classifyDEPZone(dep) {
+  if (dep >= 1.5) return { id: 'CRITICAL', label: '⚫ Kritikus', status: 'SYSTEMIC',         color: '#111827', action: 'Rendszerszintű dopamin-extrakció' };
+  if (dep >= 1.0) return { id: 'RED',      label: '🔴 Piros',   status: 'KARANTÉN',          color: '#dc2626', action: 'Fire Chief beavatkozás' };
+  if (dep >= 0.6) return { id: 'ORANGE',   label: '🟠 Narancs', status: 'ADDIKCIÓ RIZIKÓ',   color: '#ea580c', action: '600.1 kognitív vírus risk' };
+  if (dep >= 0.3) return { id: 'YELLOW',   label: '🟡 Sárga',   status: 'MONITOR',           color: '#ca8a04', action: 'Figyelés szükséges' };
+  return               { id: 'GREEN',    label: '🟢 Zöld',   status: 'STABLE',            color: '#16a34a', action: 'Normál szórakoztatás' };
+}
+
+/**
+ * DEP trigger logika kiértékelése.
+ *
+ * @param {number} dep
+ * @param {{ G_gambling: number, L_lootbox: number, D_doom: number,
+ *            HMI_loss: number, R_future: number }} vars
+ * @returns {{ gambling_karantén: boolean, lootbox_children: boolean, addiction_cascade: boolean,
+ *             fire_chief: boolean, active_triggers: string[] }}
+ */
+export function evaluateDEPTriggers(dep, vars) {
+  const gambling_karantén  = vars.G_gambling > 0.6 && vars.HMI_loss > 3.5;
+  const lootbox_children   = vars.L_lootbox > 0.5;
+  const addiction_cascade  = (vars.G_gambling + vars.D_doom) > 1.0 && vars.R_future < 0.3;
+  const fire_chief         = dep >= 1.5 || (vars.HMI_loss >= 8.0 && vars.R_future < 0.2);
+
+  const active_triggers = [];
+  if (gambling_karantén) active_triggers.push('gambling_karantén');
+  if (lootbox_children)  active_triggers.push('lootbox_children');
+  if (addiction_cascade) active_triggers.push('addiction_cascade');
+  if (fire_chief)        active_triggers.push('fire_chief');
+
+  return { gambling_karantén, lootbox_children, addiction_cascade, fire_chief, active_triggers };
+}
+
+/**
+ * Főmodell: Dopamine Extraction Parasitism Index (DEP)
+ *
+ * Formula:
+ *   DEP = (G×0.30 + L×0.25 + B×0.15 + D×0.20 + (HMI/10)×0.10) × (1 + (1−R_future)×0.5) × S × (1 + Phi/1000)
+ *
+ * @param {{ G_gambling?: number, L_lootbox?: number, B_binge?: number, D_doom?: number,
+ *            HMI_loss?: number, R_future?: number, S?: number, Phi?: number }} inputs
+ * @returns {{ dep_index: number, zone: object, triggers: object,
+ *             variable_contributions: object, diagnostics: object, variables: object }}
+ */
+export function calculateDEP(inputs = {}) {
+  const defaults = { G_gambling: 0.65, L_lootbox: 0.55, B_binge: 0.50, D_doom: 0.60, HMI_loss: 4.5, R_future: 0.35, S: 1.15, Phi: 300 };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  const base =
+    vars.G_gambling * 0.30 +
+    vars.L_lootbox  * 0.25 +
+    vars.B_binge    * 0.15 +
+    vars.D_doom     * 0.20 +
+    (vars.HMI_loss / 10) * 0.10;
+
+  const r_future_factor = 1 + (1 - vars.R_future) * 0.5;
+  const phi_effect      = 1 + vars.Phi / 1000;
+  const dep             = base * r_future_factor * vars.S * phi_effect;
+
+  const zone     = classifyDEPZone(dep);
+  const triggers = evaluateDEPTriggers(dep, vars);
+
+  const variable_contributions = {
+    G_gambling: parseFloat((vars.G_gambling * 0.30).toFixed(4)),
+    L_lootbox:  parseFloat((vars.L_lootbox  * 0.25).toFixed(4)),
+    B_binge:    parseFloat((vars.B_binge    * 0.15).toFixed(4)),
+    D_doom:     parseFloat((vars.D_doom     * 0.20).toFixed(4)),
+    HMI_loss:   parseFloat(((vars.HMI_loss / 10) * 0.10).toFixed(4)),
+  };
+
+  return {
+    dep_index: parseFloat(dep.toFixed(4)),
+    zone,
+    triggers,
+    variable_contributions,
+    diagnostics: {
+      base_index:      parseFloat(base.toFixed(4)),
+      r_future_factor: parseFloat(r_future_factor.toFixed(4)),
+      phi_effect:      parseFloat(phi_effect.toFixed(4)),
+      synergy:         vars.S,
+      missing_inputs:  missing,
+      confidence:      parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// EFU 600.82 — Vallási Identitás Antiflux (RIA) v1.0
+// Reference: EFU 600.82 RIA v1.0 (2026-04-01)
+// Note: EFU nem értékítéletet alkot – kizárólag biofizikai fluxus-hatásokat mér
+// ---------------------------------------------------------------------------
+
+/**
+ * Zóna klasszifikáció az RIA érték alapján.
+ * 5 zóna: GREEN / YELLOW / ORANGE / RED / CRITICAL
+ *
+ * @param {number} ria
+ * @returns {{ id: string, label: string, status: string, color: string, action: string }}
+ */
+export function classifyRIAZone(ria) {
+  if (ria >= 1.0) return { id: 'CRITICAL', label: '⚫ Rendszerszintű',    status: 'SYSTEMIC',  color: '#111827', action: 'CEWS M3/M11 teljes zárlat' };
+  if (ria >= 0.6) return { id: 'RED',      label: '🔴 Kritikus antiflux', status: 'CRITICAL',  color: '#dc2626', action: 'Kognitív blokk + erőforrás-zárlat' };
+  if (ria >= 0.3) return { id: 'ORANGE',   label: '🟠 Antiflux',          status: 'ANTIFLUX',  color: '#ea580c', action: 'M3↔M11↔M4 zárt hurok aktív' };
+  if (ria >= 0.1) return { id: 'YELLOW',   label: '🟡 Semleges',          status: 'NEUTRAL',   color: '#ca8a04', action: 'Mérhető antiflux, nem kritikus' };
+  return               { id: 'GREEN',    label: '🟢 Fluxus-erősítő',   status: 'AMPLIFIER', color: '#16a34a', action: 'Pozitív regeneratív hatás (→ 700.14)' };
+}
+
+/**
+ * RIA trigger logika kiértékelése.
+ *
+ * @param {number} ria
+ * @param {{ cogn_lock: number, time_distort: number, rcr: number, flux_amp: number }} vars
+ * @returns {{ cognitive_loop: boolean, mroi_distortion: boolean, flux_amplifier: boolean,
+ *             system_entropy: boolean, active_triggers: string[] }}
+ */
+export function evaluateRIATriggers(ria, vars) {
+  const cognitive_loop   = vars.cogn_lock > 0.6 && vars.rcr > 0.5;
+  const mroi_distortion  = vars.time_distort > 0.6;
+  const flux_amplifier   = vars.flux_amp > 0.6;
+  const system_entropy   = ria >= 1.0;
+
+  const active_triggers = [];
+  if (cognitive_loop)  active_triggers.push('cognitive_loop');
+  if (mroi_distortion) active_triggers.push('mroi_distortion');
+  if (flux_amplifier)  active_triggers.push('flux_amplifier');
+  if (system_entropy)  active_triggers.push('system_entropy');
+
+  return { cognitive_loop, mroi_distortion, flux_amplifier, system_entropy, active_triggers };
+}
+
+/**
+ * Főmodell: Religious Identity Antiflux Index (RIA)
+ *
+ * Formula:
+ *   RIA = (cogn_lock×0.35 + time_distort×0.25 + rcr×0.25 + sac_infra×0.15 − flux_amp×0.20) × S × (1 + Phi/1000)
+ *
+ * flux_amp is subtracted as it represents positive flux amplification.
+ *
+ * @param {{ cogn_lock?: number, time_distort?: number, rcr?: number,
+ *            sac_infra?: number, flux_amp?: number, S?: number, Phi?: number }} inputs
+ * @returns {{ ria_index: number, zone: object, triggers: object,
+ *             variable_contributions: object, diagnostics: object, variables: object }}
+ */
+export function calculateRIA(inputs = {}) {
+  const defaults = { cogn_lock: 0.5, time_distort: 0.45, rcr: 0.50, sac_infra: 0.40, flux_amp: 0.35, S: 1.0, Phi: 150 };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  const base =
+    vars.cogn_lock   * 0.35 +
+    vars.time_distort * 0.25 +
+    vars.rcr          * 0.25 +
+    vars.sac_infra    * 0.15 -
+    vars.flux_amp     * 0.20;
+
+  const phi_effect = 1 + vars.Phi / 1000;
+  const ria = Math.max(0, base) * vars.S * phi_effect;
+
+  const zone     = classifyRIAZone(ria);
+  const triggers = evaluateRIATriggers(ria, vars);
+
+  const variable_contributions = {
+    cogn_lock:    parseFloat((vars.cogn_lock   * 0.35).toFixed(4)),
+    time_distort: parseFloat((vars.time_distort * 0.25).toFixed(4)),
+    rcr:          parseFloat((vars.rcr          * 0.25).toFixed(4)),
+    sac_infra:    parseFloat((vars.sac_infra    * 0.15).toFixed(4)),
+    flux_amp:     parseFloat((-vars.flux_amp    * 0.20).toFixed(4)),
+  };
+
+  return {
+    ria_index: parseFloat(ria.toFixed(4)),
+    zone,
+    triggers,
+    variable_contributions,
+    diagnostics: {
+      base_index:     parseFloat(base.toFixed(4)),
+      phi_effect:     parseFloat(phi_effect.toFixed(4)),
+      synergy:        vars.S,
+      missing_inputs: missing,
+      confidence:     parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}

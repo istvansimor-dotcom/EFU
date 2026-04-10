@@ -17,6 +17,9 @@ import Atrocitas600Panel from './Atrocitas600Panel.jsx';
 import Narrativa600Panel from './Narrativa600Panel.jsx';
 import AMDPI600Panel from './AMDPI600Panel.jsx';
 import HobbyAnimal600Panel from './HobbyAnimal600Panel.jsx';
+import MVP600Panel from './MVP600Panel.jsx';
+import Entertainment600Panel from './Entertainment600Panel.jsx';
+import ReligiousFlux600Panel from './ReligiousFlux600Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -554,6 +557,15 @@ export default function Calculator() {
 
       {/* EFU 600.30 — Hobby Animal Keeping & Wildlife Extraction Parasitism v1.0 */}
       <HobbyAnimal600Panel />
+
+      {/* EFU 600.10 — Monitoring és Verifikáció (MVP) v1.0 */}
+      <MVP600Panel />
+
+      {/* EFU 600.20 — Szórakoztatóipar Dopamin Extrakció v1.0 */}
+      <Entertainment600Panel />
+
+      {/* EFU 600.82 — Vallási Identitás Antiflux v1.0 */}
+      <ReligiousFlux600Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>
