@@ -162,6 +162,74 @@ export const caseStudies = [
       efu_input_direct: 22.0,
     },
   },
+  {
+    id: 'pedosphere_restoration',
+    label: 'Pedosphere Restoration (Farmland)',
+    description:
+      'Degraded agricultural land restoration programme using regenerative soil practices ' +
+      '(cover cropping, biochar, reduced tillage). Increases carbon sequestration and soil ' +
+      'metabolic capacity. Based on EFU Pedosphere Framework.',
+    source: '104.44 EFU PEDOSPHERE (Termőföld)',
+    params: {
+      delta_e_saved: 60000,
+      grid_co2: 0.35,
+      racf: 526,
+      jim30: 90,
+      d_multiplier: 0.3,
+      efu_input_direct: 8.5,
+    },
+  },
+  {
+    id: 'hydrosphere_treatment',
+    label: 'Hydrosphere — Closed-Loop Water Treatment',
+    description:
+      'Municipal closed-loop water recycling facility with gravity-fed distribution, ' +
+      'open-standard sensor arrays, and local maintenance capability. Based on EFU ' +
+      'Hydrosphere Research Framework.',
+    source: '104.45 ENG EFU HYDROSPHERE RESEARCH FRAMEWORK',
+    params: {
+      delta_e_saved: 48000,
+      grid_co2: 0.35,
+      racf: 526,
+      jim30: 72,
+      d_multiplier: 0.3,
+      efu_input_direct: 11.2,
+    },
+  },
+  {
+    id: 'atmosphere_biochar',
+    label: 'Atmosphere — Biochar Carbon Sequestration',
+    description:
+      'Regional biochar production from agricultural waste combined with atmospheric ' +
+      'carbon capture. Permanent sequestration pathway with soil co-benefit. Based on ' +
+      'EFU Atmosphere Research Framework.',
+    source: '104.46 ENG. EFU ATMOSPHERE RESEARCH FRAMEWORK',
+    params: {
+      delta_e_saved: 90000,
+      grid_co2: 0.35,
+      racf: 526,
+      jim30: 82,
+      d_multiplier: 0.3,
+      efu_input_direct: 16.0,
+    },
+  },
+  {
+    id: 'government_efficiency',
+    label: 'Government Digital Efficiency Programme',
+    description:
+      'Public sector digital transformation reducing paper-based workflows, building ' +
+      'energy consumption, and administrative travel. Open-source platform, citizen ' +
+      'data sovereignty maintained. Based on EFU Government Efficiency Licence.',
+    source: '104.38 EFU GOVERNMENT EFFICIENCY LICENCE v1',
+    params: {
+      delta_e_saved: 25000,
+      grid_co2: 0.35,
+      racf: 526,
+      jim30: 60,
+      d_multiplier: 0.3,
+      efu_input_direct: 9.0,
+    },
+  },
 ];
 
 export default caseStudies;
