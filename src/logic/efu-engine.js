@@ -587,3 +587,171 @@ export function calculateHealingEfficiency(cfib_patient, eta_max = 1.0, cfib_ref
   const reduction_pct = Math.round((1 - eta_heal / eta_max) * 1000) / 10;
   return { eta_heal, reduction_pct };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.85 — Boldogság-gazdaság Paradoxona (Happiness Economy Paradox)
+// Eudaimónia vs. Hedónia | F-META Domain | FC-APPROVED | v2.1 FINAL
+// Reference: EFU 600.85 v2.1 (2026.04.10)
+// ---------------------------------------------------------------------------
+
+const ETA_W_BASELINE = 0.70;
+const CBS_THRESHOLD  = 0.6;
+
+/**
+ * Calculate the Boldogság-gazdaság Paradoxon (BH) indicator.
+ *
+ * Two forms (§II):
+ *   Rolling-window:   BH_t = |ΔH_t / ΔGDP_t|
+ *   Elasticity-based: BH   = |(dH/H) / (dGDP/GDP)|
+ *
+ * @param {{ delta_h: number, delta_gdp: number }} params  — absolute changes
+ * @returns {{ bh: number, state: string, interpretation: string }}
+ */
+export function calculateBH({ delta_h, delta_gdp }) {
+  if (delta_gdp === 0) return { bh: 0, state: 'PARADOX', interpretation: 'GDP stagnál — mérés nem lehetséges' };
+  const bh = Math.abs(delta_h / delta_gdp);
+  const bh_r = Math.round(bh * 1000) / 1000;
+  const state = bh_r < 0.15 ? 'STRONG_PARADOX' : bh_r < 0.50 ? 'MODERATE_PARADOX' : 'NO_PARADOX';
+  const interpretation = {
+    STRONG_PARADOX:   'Erős Easterlin-paradoxon — GDP nő, boldogság nem követi',
+    MODERATE_PARADOX: 'Mérsékelt paradoxon — részleges kapcsolat',
+    NO_PARADOX:       'Nem paradox állapot — boldogság érzékenyen követi a GDP-t',
+  }[state];
+  return { bh: bh_r, state, interpretation };
+}
+
+/**
+ * Calculate the CBS (Cognitive-Biosphere-Stress) hybrid indicator.
+ *
+ * Formula (§IV.3):  CBS = α × CBS_ratio + (1−α) × CBS_entropy
+ *
+ * CBS_ratio   = stress_events / total_events
+ * CBS_entropy = −Σ p_i × log(p_i)  (normalised to [0,1] via /log(k))
+ *
+ * @param {{ stress_events: number, total_events: number, probabilities: number[], alpha: number }} params
+ * @returns {{ cbs: number, cbs_ratio: number, cbs_entropy: number, is_high: boolean }}
+ */
+export function calculateCBS({ stress_events, total_events, probabilities = [], alpha = 0.5 }) {
+  const cbs_ratio = total_events > 0 ? Math.min(stress_events / total_events, 1) : 0;
+
+  // Shannon entropy normalised to [0,1] by dividing by log(k)
+  let cbs_entropy = 0;
+  const k = probabilities.length;
+  if (k > 1) {
+    const raw = -probabilities.reduce((s, p) => {
+      if (p <= 0) return s;
+      return s + p * Math.log(p);
+    }, 0);
+    cbs_entropy = Math.min(raw / Math.log(k), 1);
+  }
+
+  const cbs = Math.round((alpha * cbs_ratio + (1 - alpha) * cbs_entropy) * 1000) / 1000;
+  return { cbs, cbs_ratio: Math.round(cbs_ratio * 1000) / 1000, cbs_entropy: Math.round(cbs_entropy * 1000) / 1000, is_high: cbs >= CBS_THRESHOLD };
+}
+
+/**
+ * Calculate η(W) — happiness efficiency as lagged derivative of H over CBS.
+ *
+ * Composite form (§V.3):  η(W) = w_h × η_h + w_e × η_e
+ *
+ * Where η_h and η_e are estimated from hedonic/eudaimonic happiness changes
+ * and the lagged CBS change.
+ *
+ * @param {{ delta_h_h: number, delta_h_e: number, delta_cbs_lag: number, w_h: number, w_e: number }} params
+ * @returns {{ eta_w: number, eta_h: number, eta_e: number, state: string, description: string }}
+ */
+export function calculateEtaW({ delta_h_h, delta_h_e, delta_cbs_lag, w_h = 0.72, w_e = 0.28 }) {
+  if (Math.abs(delta_cbs_lag) < 1e-10) {
+    return { eta_w: 0, eta_h: 0, eta_e: 0, state: 'ADAPTATION', description: 'Adaptáció / deszenzitizáció — közömbös rendszerállapot' };
+  }
+  const eta_h = Math.round((delta_h_h / delta_cbs_lag) * 1000) / 1000;
+  const eta_e = Math.round((delta_h_e / delta_cbs_lag) * 1000) / 1000;
+  const eta_w = Math.round((w_h * eta_h + w_e * eta_e) * 1000) / 1000;
+
+  let state, description;
+  if (eta_w > 0.05) {
+    state = 'EUDAIMONIC';
+    description = 'Eudaimonikus válasz — stressz mellett boldogság nő';
+  } else if (eta_w < -0.05) {
+    state = 'HEDONIC_DROP';
+    description = 'Hedónikus visszaesés — stressz-növekedés boldogságcsökkenést okoz';
+  } else {
+    state = 'ADAPTATION';
+    description = 'Adaptáció / deszenzitizáció — közömbös rendszerállapot';
+  }
+  return { eta_w, eta_h, eta_e, state, description };
+}
+
+/**
+ * Calculate the BGP_score (Boldogság-gazdaság Parazitizmus Index).
+ *
+ * Formula (§III):  BGP = (H_spend_per_capita × DT_index) / (η(W)_baseline + |η(W)|)
+ *
+ * @param {{ h_spend_per_capita: number, dt_index: number, eta_w: number, eta_w_baseline?: number }} params
+ * @returns {{ bgp: number, zone: string, color: string, eta_effect: string }}
+ */
+export function calculateBGPScore({ h_spend_per_capita, dt_index, eta_w, eta_w_baseline = ETA_W_BASELINE }) {
+  const denom = eta_w_baseline + Math.abs(eta_w);
+  const bgp = denom > 0 ? Math.round((h_spend_per_capita * dt_index) / denom * 1000) / 1000 : Infinity;
+
+  let zone, color, eta_effect;
+  if (bgp <= 0.2)      { zone = 'EUDAIMÓNIA';  color = '#047857'; eta_effect = 'Növeli — FC Farm típus'; }
+  else if (bgp <= 1.0) { zone = 'REGENERATÍV'; color = '#0891b2'; eta_effect = 'Növeli — fenntartható'; }
+  else if (bgp <= 3.0) { zone = 'SEMLEGES';    color = '#ca8a04'; eta_effect = 'Semleges'; }
+  else                 { zone = 'PARAZITA';    color = '#dc2626'; eta_effect = 'Csökkenti — antiflux'; }
+
+  return { bgp, zone, color, eta_effect };
+}
+
+/**
+ * Calculate Δη(W) — the EU-calibrated paradox formula (§VIII).
+ *
+ * Formula: Δη(W) = η(W)_eudaimon × W_e − η(W)_hedón × W_h
+ *
+ * @param {{ eta_w_eudaimon: number, eta_w_hedon: number, w_e: number, w_h: number }} params
+ * @returns {{ delta_eta_w: number, zone: string, color: string, description: string }}
+ */
+export function calculateDeltaEtaW({ eta_w_eudaimon, eta_w_hedon, w_e = 0.28, w_h = 0.72 }) {
+  const delta = Math.round((eta_w_eudaimon * w_e - eta_w_hedon * w_h) * 1000) / 1000;
+
+  let zone, color, description;
+  if (delta >= 0.5)        { zone = 'EUDAIMÓNIA';     color = '#047857'; description = 'FC Farm szintű inverz struktúra'; }
+  else if (delta > 0)      { zone = 'REGENERATÍV';    color = '#16a34a'; description = 'Pozitív nettó jóllét-egyenleg'; }
+  else if (delta > -0.2)   { zone = 'SEMLEGES';       color = '#ca8a04'; description = 'Közel egyensúlyi állapot'; }
+  else                     { zone = 'PARAZITA ZÓNA';  color = '#dc2626'; description = 'Hedónikus túlsúly — rendszeres nettó jóllét-csökkenés'; }
+
+  return { delta_eta_w: delta, zone, color, description };
+}
+
+/**
+ * Classify the CEWS state based on CBS trend and BGP/η(W) values.
+ *
+ * CEWS Trigger (§X.1):
+ *   CBS↑  ∧  BGP_score > 1  ⇒  CRITICAL
+ *   CBS↑  ∧  BGP_score < 1  ⇒  ADAPTIVE STRESS
+ *   CBS↓  ∧  BGP_score < 1  ⇒  OPTIMAL GROWTH
+ *   CBS↓  but  η_e < |η_h|  ⇒  LATENT DECLINE
+ *
+ * Stability (§XI):  GREEN  ⇔  η_e > |η_h|  ∧  BGP < 1  ∧  CBS↓
+ *
+ * @param {{ cbs_high: boolean, bgp: number, eta_e: number, eta_h: number }} params
+ * @returns {{ state: string, label: string, color: string, description: string, action: string }}
+ */
+export function classifyCEWSHappinessState({ cbs_high, bgp, eta_e, eta_h }) {
+  const eudaimon_dominant = eta_e > Math.abs(eta_h);
+  const regenerative = bgp < 1;
+
+  let state;
+  if (cbs_high && !regenerative)               state = 'CRITICAL';
+  else if (cbs_high && regenerative)           state = 'ADAPTIVE_STRESS';
+  else if (!cbs_high && regenerative && eudaimon_dominant)  state = 'OPTIMAL_GROWTH';
+  else                                         state = 'LATENT_DECLINE';
+
+  const STATES = {
+    CRITICAL:       { label: 'CRITICAL',        color: '#dc2626', description: 'Klasszikus krízis: stressz nő, boldogság csökken', action: 'Azonnali policy beavatkozás szükséges' },
+    ADAPTIVE_STRESS:{ label: 'ADAPTIVE STRESS', color: '#ca8a04', description: 'Eudaimonikus növekedés stressz közben',             action: 'Eudaimonikus megerősítés javasolt' },
+    OPTIMAL_GROWTH: { label: 'OPTIMAL GROWTH',  color: '#16a34a', description: 'Ideális: alacsony stressz, növekvő boldogság',      action: 'Rendszerstabilitás fenntartása' },
+    LATENT_DECLINE: { label: 'LATENT DECLINE',  color: '#7c3aed', description: 'Rejtett romlás: kedvezőtlen tendencia látens stressz alatt', action: 'Monitoring fokozása szükséges' },
+  };
+  return { state, ...STATES[state] };
+}
