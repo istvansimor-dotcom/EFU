@@ -159,3 +159,80 @@ export function classifyMROI(mroi) {
   if (mroi >= 0)  return { label: 'LIMITED',  color: '#d97706', emoji: '🟡' };
   return            { label: 'PARASITIC', color: '#dc2626', emoji: '🔴' };
 }
+
+// ---------------------------------------------------------------------------
+// CEWS — Civilization Early Warning System
+// Dynamic Weighting Engine (EFU 217.2 / UCAIF v3.1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Calculate the dynamic composite weight for a single CEWS indicator
+ * based on its metadata values.
+ *
+ * Formula (Hagyma Metódus, §2):
+ *   weight = w_irrev × latency_factor × recovery_factor × cascade_boost × shadow_boost
+ *
+ * All factors are dimensionless multipliers that modulate the base w_irrev weight.
+ *
+ * @param {object} metadata
+ * @param {number}  metadata.w_irrev       - reversibility weight 0–1
+ * @param {string}  metadata.latency       - 'immediate' | 'medium' | 'long'
+ * @param {string}  metadata.recovery_time - 'short' | 'medium' | 'long' | 'very_long'
+ * @param {boolean} metadata.cascade_flag  - cascade risk flag
+ * @param {boolean} metadata.shadow_delta  - hidden flux flag
+ * @returns {number} composite weight (0–1 range, higher = more critical)
+ */
+export function calculateDynamicWeight(metadata) {
+  const {
+    w_irrev       = 0.5,
+    latency       = 'medium',
+    recovery_time = 'medium',
+    cascade_flag  = false,
+    shadow_delta  = false,
+  } = metadata;
+
+  // Latency factor: shorter latency in an early-warning context means
+  // the system must react faster → slightly higher urgency weight.
+  const latencyFactor = { immediate: 1.15, medium: 1.0, long: 0.9 }[latency] ?? 1.0;
+
+  // Recovery factor: longer recovery → higher irreversibility → higher weight.
+  const recoveryFactor = { short: 0.8, medium: 1.0, long: 1.15, very_long: 1.3 }[recovery_time] ?? 1.0;
+
+  // Cascade boost: indicators that can trigger domino effects get +20% weight.
+  const cascadeBoost = cascade_flag ? 1.2 : 1.0;
+
+  // Shadow delta boost: hidden flux indicators carry additional uncertainty → +10%.
+  const shadowBoost = shadow_delta ? 1.1 : 1.0;
+
+  const raw = w_irrev * latencyFactor * recoveryFactor * cascadeBoost * shadowBoost;
+
+  // Clamp to [0, 1]
+  return Math.round(Math.min(Math.max(raw, 0), 1) * 1000) / 1000;
+}
+
+/**
+ * Classify a Trajectory Vector score (0–100) into a civilisation direction.
+ *
+ * @param {number} score - Trajectory Vector score (0 = collapse, 100 = regenerative)
+ * @returns {{ label: string, labelHu: string, color: string, emoji: string, track: string }}
+ */
+export function classifyTrajectoryVector(score) {
+  if (score >= 70) return { label: 'Regenerative Path',   labelHu: 'Regeneratív Pálya',    color: '#16a34a', emoji: '🌱', track: 'A' };
+  if (score >= 50) return { label: 'Stable Path',         labelHu: 'Stabil Pálya',          color: '#2563eb', emoji: '🔵', track: 'A' };
+  if (score >= 30) return { label: 'Degradation Path',    labelHu: 'Degradációs Pálya',     color: '#d97706', emoji: '🟡', track: 'A' };
+  if (score >= 15) return { label: 'Crisis Path',         labelHu: 'Krízis Pálya',          color: '#ea580c', emoji: '🟠', track: 'B' };
+  return                   { label: 'Collapse Path',      labelHu: 'Összeomlási Pálya',     color: '#dc2626', emoji: '🔴', track: 'B' };
+}
+
+/**
+ * Determine the CEWS trigger level (colour) from a composite index score (0–100).
+ *
+ * @param {number} score
+ * @returns {{ id: string, label: string, labelHu: string, color: string, action: string }}
+ */
+export function classifyCewsTrigger(score) {
+  if (score >= 70) return { id: 'green',  label: 'Green',  labelHu: 'Zöld',    color: '#16a34a', action: 'Monitoring' };
+  if (score >= 50) return { id: 'yellow', label: 'Yellow', labelHu: 'Sárga',   color: '#ca8a04', action: 'Enhanced surveillance' };
+  if (score >= 30) return { id: 'orange', label: 'Orange', labelHu: 'Narancs', color: '#ea580c', action: 'Track A activation' };
+  return                   { id: 'red',   label: 'Red',    labelHu: 'Piros',   color: '#dc2626', action: 'Fire Chief Protocol' };
+}

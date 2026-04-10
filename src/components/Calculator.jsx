@@ -7,6 +7,7 @@ import {
   classifyMROI,
   FLR_PARASITISM_THRESHOLD,
 } from '../logic/efu-engine.js';
+import CewsPanel from './CewsPanel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -516,6 +517,9 @@ export default function Calculator() {
           </div>
         ))}
       </div>
+
+      {/* CEWS — Civilization Early Warning System */}
+      <CewsPanel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>
