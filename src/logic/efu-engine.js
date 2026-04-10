@@ -1129,7 +1129,7 @@ export function evaluateM4Triggers(ndi, vars) {
  * @returns {{ ndi_index: number, zone: object, m4_status: string, triggers: object,
  *             submodules: { kni: number, eni: number }, variables: { raw: object, normalized: object } }}
  */
-export function calculateNDI(narrData) {
+export function calculateNDI(narrData = {}) {
   const vars = {
     N:   narrData.N   ?? 0.8,
     C:   narrData.C   ?? 0,
