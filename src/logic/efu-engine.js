@@ -393,3 +393,97 @@ export function classifyMRState(mr_score, p_syn, eta_declining = false, cogn_dec
 
   return { collapse_risk, tier, color, flags };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.2 — Molekuláris Rendszerhatár-Események (MSBE)
+// Molecular System Boundary Events
+// Reference: EFU 600.2 (2026.04)
+// ---------------------------------------------------------------------------
+
+/**
+ * Classify whether a substance meets MSBE criteria.
+ *
+ * Classification rules (§600.2.3):
+ *   C1: halflife > eco_cycle (years)
+ *   C2: baf > 1
+ *   C3: metabolite_more_toxic === true
+ *   C4: no_natural_analogue === true
+ *
+ * At least ONE criterion is sufficient for MSBE classification.
+ *
+ * @param {{ halflife: number, eco_cycle: number, baf: number, metabolite_more_toxic: boolean, no_natural_analogue: boolean }} params
+ * @returns {{ criteria_met: string[], is_msbe: boolean, precautionary: boolean, criteria_details: object[] }}
+ */
+export function classifyMSBE({ halflife, eco_cycle = 25, baf, metabolite_more_toxic, no_natural_analogue }) {
+  const criteria_details = [
+    { id: 'C1', met: halflife > eco_cycle,      value: halflife,            threshold: `> ${eco_cycle} év` },
+    { id: 'C2', met: baf > 1,                   value: baf,                 threshold: '> 1' },
+    { id: 'C3', met: metabolite_more_toxic,      value: metabolite_more_toxic, threshold: 'igen' },
+    { id: 'C4', met: no_natural_analogue,        value: no_natural_analogue, threshold: 'igen' },
+  ];
+
+  const criteria_met = criteria_details.filter((c) => c.met).map((c) => c.id);
+  const is_msbe = criteria_met.length > 0;
+
+  return { criteria_met, is_msbe, criteria_details };
+}
+
+/**
+ * Calculate the MSBE risk score (0–100) and determine SBE trigger level.
+ *
+ * Score is based on number of criteria met, BAF magnitude, and half-life ratio.
+ *
+ * @param {{ halflife: number, eco_cycle: number, baf: number, metabolite_more_toxic: boolean, no_natural_analogue: boolean, evidence_level: string }} params
+ * @returns {{ msbe_score: number, sbe_level: number, criteria_met: string[] }}
+ */
+export function calculateMSBEScore({
+  halflife,
+  eco_cycle = 25,
+  baf,
+  metabolite_more_toxic,
+  no_natural_analogue,
+  evidence_level = 'none',
+}) {
+  const { criteria_met } = classifyMSBE({ halflife, eco_cycle, baf, metabolite_more_toxic, no_natural_analogue });
+
+  // Base score: each criterion contributes 20 points
+  let score = criteria_met.length * 20;
+
+  // BAF severity bonus: log scale (BAF 1 → 0, BAF 10 → +10, BAF 100 → +20)
+  if (baf > 1) score += Math.min(Math.log10(baf) * 10, 20);
+
+  // Half-life severity bonus: ratio to eco_cycle (capped at +15)
+  if (halflife > eco_cycle) {
+    const ratio = Math.min(halflife / eco_cycle, 100);
+    score += Math.min(Math.log10(ratio) * 7.5, 15);
+  }
+
+  // Evidence level multiplier (no evidence → precautionary reduction)
+  const evidenceMultiplier = { none: 0.6, model: 0.8, lab: 1.0, field: 1.1, confirmed: 1.2 }[evidence_level] ?? 1.0;
+  score = Math.min(Math.round(score * evidenceMultiplier), 100);
+
+  // Determine SBE trigger level
+  let sbe_level;
+  if (criteria_met.length === 0)      sbe_level = 0;
+  else if (score < 35)                sbe_level = 1; // precautionary
+  else if (score < 65)                sbe_level = 2; // confirmed
+  else                                sbe_level = 3; // critical/irreversible
+
+  return { msbe_score: score, sbe_level, criteria_met };
+}
+
+/**
+ * Determine the SBE trigger level label/color for a given sbe_level integer (0–3).
+ *
+ * @param {number} sbe_level
+ * @returns {{ id: string, label: string, labelEn: string, color: string, action: string, cews_trigger: string }}
+ */
+export function triggerSBELevel(sbe_level) {
+  const levels = [
+    { id: 'SBE_0', label: 'Nincs MSBE kritérium',            labelEn: 'No MSBE criteria met',          color: '#16a34a', action: 'Monitoring folytatása',                                                  cews_trigger: 'green'  },
+    { id: 'SBE_1', label: 'MSBE — Elővigyázatossági',        labelEn: 'MSBE — Precautionary',           color: '#ca8a04', action: 'Megerősítő mérés szükséges',                                             cews_trigger: 'yellow' },
+    { id: 'SBE_2', label: 'MSBE — Megerősített esemény',     labelEn: 'MSBE — Confirmed event',         color: '#ea580c', action: 'Track A CEWS aktiválás; 600.52-CFI-B réteg frissítés',                   cews_trigger: 'orange' },
+    { id: 'SBE_3', label: 'MSBE — Kritikus / Irreverzibilis',labelEn: 'MSBE — Critical / Irreversible', color: '#dc2626', action: 'Fire Chief Protokoll; 600.7 SBE maximális szint; azonnali beavatkozás',  cews_trigger: 'red'    },
+  ];
+  return levels[Math.max(0, Math.min(sbe_level, 3))];
+}
