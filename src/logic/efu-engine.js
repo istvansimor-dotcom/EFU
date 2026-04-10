@@ -956,3 +956,96 @@ export function runAMDPIIntegration(readings = {}, cfibTotal = 0) {
 
   return { indicators, matrixSummary };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.56 — Atrocitás Potenciál (A-érték) Modell v1.2
+// Reference: EFU 600.56 CFI-A (Systemic Collapse Trigger) v1.2 (2026-03-28)
+// ---------------------------------------------------------------------------
+
+/**
+ * Alapmodell (multiplikatív): A = B × P × S × E × I × (1/D) × T × Φ(EFU)
+ *
+ * @param {{ B: number, P: number, S: number, E: number, I: number, D: number, T: number, Phi: number }} components
+ * @returns {number} A_value (normalizált)
+ */
+export function calculateAValue({ B, P, S, E, I, D, T, Phi }) {
+  const safeD = Math.max(D, 0.01);
+  return B * P * S * E * I * (1 / safeD) * T * Phi;
+}
+
+/**
+ * Logaritmikus stabil forma (ajánlott CDS-ben):
+ * A = exp( Σ (w_i × log(X_i)) ) × (1/D)
+ *
+ * @param {{ B: number, P: number, S: number, E: number, I: number, D: number, T: number, Phi: number }} components
+ * @param {{ B?: number, P?: number, S?: number, E?: number, I?: number, T?: number, Phi?: number }} weights
+ * @returns {number} A_log
+ */
+export function calculateAValueLog(components, weights = {}) {
+  const { B, P, S, E, I, D, T, Phi } = components;
+  const w = { B: 1, P: 1, S: 1, E: 1, I: 1, T: 1, Phi: 1, ...weights };
+  const safeD = Math.max(D, 0.01);
+
+  const vars = [
+    [B,   w.B],
+    [P,   w.P],
+    [S,   w.S],
+    [E,   w.E],
+    [I,   w.I],
+    [T,   w.T],
+    [Phi, w.Phi],
+  ];
+
+  const logSum = vars.reduce((acc, [x, wi]) => {
+    const safeX = Math.max(x, 0.0001);
+    return acc + wi * Math.log(safeX);
+  }, 0);
+
+  return Math.exp(logSum) * (1 / safeD);
+}
+
+/**
+ * Dinamikus kiterjesztés:
+ * A_dynamic = A × (1 + α × dS/dt + β × dP/dt)
+ *
+ * @param {number} A_value
+ * @param {{ alpha?: number, beta?: number, dS_dt?: number, dP_dt?: number }} params
+ * @returns {number} A_dynamic
+ */
+export function calculateADynamic(A_value, { alpha = 0.3, beta = 0.3, dS_dt = 0, dP_dt = 0 } = {}) {
+  return A_value * (1 + alpha * dS_dt + beta * dP_dt);
+}
+
+/**
+ * Zóna klasszifikáció az A-érték alapján.
+ *
+ * @param {number} A
+ * @returns {{ id: string, label: string, state: string, cdsReaction: string, color: string }}
+ */
+export function classifyAZone(A) {
+  if (A < 1.0)  return { id: 'GREEN',  label: '🟢 Zöld',   state: 'Stabil',            cdsReaction: 'Monitorozás',               color: '#16a34a' };
+  if (A < 1.5)  return { id: 'YELLOW', label: '🟡 Sárga',  state: 'Instabil',          cdsReaction: 'Figyelmeztetés',            color: '#ca8a04' };
+  if (A <= 2.5) return { id: 'ORANGE', label: '🟠 Narancs', state: 'Pre-Atrocitás',    cdsReaction: 'Beavatkozás (900.2)',       color: '#ea580c' };
+  return         { id: 'RED',    label: '🔴 Vörös',  state: 'Aktív összeomlás', cdsReaction: 'Kényszer allokáció (AAP)', color: '#dc2626' };
+}
+
+/**
+ * Trigger logika kiértékelése.
+ *
+ * @param {number} A - jelenlegi A-érték
+ * @param {number} dA_dt - A változásának éves rátája
+ * @returns {{ level: number, cdp_activation: boolean, aap_required: boolean, escalation: boolean, active_triggers: string[] }}
+ */
+export function evaluateATriggers(A, dA_dt = 0) {
+  const active = [];
+  let level = 0;
+  let cdp_activation = false;
+  let aap_required   = false;
+  let escalation     = false;
+
+  if (A > 1.5) { active.push('T1'); level = Math.max(level, 1); cdp_activation = true; }
+  if (A > 2.5) { active.push('T2'); level = Math.max(level, 2); aap_required   = true; }
+  if (dA_dt > 0.3) { active.push('T3'); level = Math.max(level, 3); escalation = true; }
+
+  return { level, cdp_activation, aap_required, escalation, active_triggers: active };
+}

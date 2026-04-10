@@ -13,6 +13,7 @@ import MSBE600Panel from './MSBE600Panel.jsx';
 import PFAS600Panel from './PFAS600Panel.jsx';
 import Happiness600Panel from './Happiness600Panel.jsx';
 import Synergy600Panel from './Synergy600Panel.jsx';
+import Atrocitas600Panel from './Atrocitas600Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -538,6 +539,9 @@ export default function Calculator() {
 
       {/* EFU 600.0 — 600-as Szinergia-Mátrix (Antiflux Szinergia Alapoperátor) */}
       <Synergy600Panel />
+
+      {/* EFU 600.56 — Atrocitás Potenciál (A-érték) Modell v1.2 */}
+      <Atrocitas600Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>
