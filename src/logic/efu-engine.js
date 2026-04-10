@@ -1315,3 +1315,121 @@ export function calculateAMDPI(readings = {}, config) {
     variables: { raw: vars, normalized: norm },
   };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.30 — Hobby Animal Keeping & Wildlife Extraction Parasitism v1.0
+// Reference: EFU 600.30 HAP v1.0 (2026-04-10)
+// Special flags: BLACK_LAYER_RESTRICTED | UNINTENTIONAL_PARASITISM
+// ---------------------------------------------------------------------------
+
+/**
+ * Zóna klasszifikáció a HAP érték alapján.
+ * 5 zóna: GREEN / YELLOW / ORANGE / RED / CRITICAL
+ *
+ * @param {number} hap
+ * @returns {{ id: string, label: string, status: string, multiplier: number, color: string, action: string }}
+ */
+export function classifyHAPZone(hap) {
+  if (hap >= 6.0) return { id: 'CRITICAL', label: '⚫ Kritikus', status: 'FIRE CHIEF',    multiplier: 3.0, color: '#111827', action: 'Fire Chief + 700.1 + 800.12 Gaian protocol' };
+  if (hap >= 3.0) return { id: 'RED',      label: '🔴 Piros',   status: 'KARANTÉN',       multiplier: 2.0, color: '#dc2626', action: 'Karantén protokoll + 700.1 beavatkozás' };
+  if (hap >= 1.5) return { id: 'ORANGE',   label: '🟠 Narancs', status: 'CONFIRMED',      multiplier: 1.5, color: '#ea580c', action: 'CEWS M9 trigger + fekete réteg vizsgálat' };
+  if (hap >= 0.8) return { id: 'YELLOW',   label: '🟡 Sárga',   status: 'STRUKTURÁLIS',   multiplier: 1.2, color: '#ca8a04', action: 'TNR program + CITES audit' };
+  return               { id: 'GREEN',    label: '🟢 Zöld',   status: 'WATCH',           multiplier: 1.0, color: '#16a34a', action: 'Monitorozás – oktatási kampány' };
+}
+
+/**
+ * HAP trigger logika kiértékelése.
+ *
+ * @param {number} hap
+ * @param {{ L1: number, L2: number, L3: number, L4: number, L5: number, L6: number, Phi: number }} vars
+ * @returns {{ unintentional_harm: boolean, black_layer: boolean, invasion_alert: boolean,
+ *             fire_chief: boolean, active_triggers: string[] }}
+ */
+export function evaluateHAPTriggers(hap, vars) {
+  const unintentional_harm = vars.L1 > 0.5 || vars.L2 > 0.45;
+  const black_layer        = vars.L4 > 0.5 || vars.Phi > 400;
+  const invasion_alert     = vars.L6 > 0.4 && (vars.L3 > 0.3 || vars.L5 > 0.4);
+  const fire_chief         = hap > 5.0 || vars.L4 > 0.7 || vars.Phi > 600;
+
+  const active_triggers = [];
+  if (unintentional_harm) active_triggers.push('UNINTENTIONAL_HARM');
+  if (black_layer)        active_triggers.push('BLACK_LAYER');
+  if (invasion_alert)     active_triggers.push('INVASION_ALERT');
+  if (fire_chief)         active_triggers.push('FIRE_CHIEF');
+
+  return { unintentional_harm, black_layer, invasion_alert, fire_chief, active_triggers };
+}
+
+/**
+ * Főmodell: Hobby Animal Parasitism Index (HAP)
+ *
+ * Formula:
+ *   HAP = (L1×0.25 + L2×0.15 + L3×0.20 + L4×0.20 + L5×0.12 + L6×0.08) × S × (1 + Φ/1000)
+ *
+ * 6 réteg súlyozva:
+ *   L1 Macskák (0.25) – legnagyobb dokumentált ökológiai hatás
+ *   L2 Legális szektór (0.15) – erőforrás-extrakció
+ *   L3 Egzotikus (0.20) – CITES szürkezóna
+ *   L4 Vadcsempészet (0.20) – M7 FEKETE réteg
+ *   L5 Vadászat (0.12) – fenntartható vs. trófea
+ *   L6 Inváziós fajok (0.08) – szabadon engedett kedvencek
+ *
+ * @param {{ L1?: number, L2?: number, L3?: number, L4?: number,
+ *            L5?: number, L6?: number, S?: number, Phi?: number }} inputs
+ * @returns {{ hap_index: number, zone: object, triggers: object,
+ *             layer_contributions: object, diagnostics: object, variables: object }}
+ */
+export function calculateHAP(inputs = {}) {
+  const defaults = { L1: 0.55, L2: 0.45, L3: 0.40, L4: 0.35, L5: 0.40, L6: 0.30, S: 1.1, Phi: 150 };
+  const weights  = { L1: 0.25, L2: 0.15, L3: 0.20, L4: 0.20, L5: 0.12, L6: 0.08 };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  // Weighted base sum (layers L1–L6)
+  const base =
+    vars.L1 * weights.L1 +
+    vars.L2 * weights.L2 +
+    vars.L3 * weights.L3 +
+    vars.L4 * weights.L4 +
+    vars.L5 * weights.L5 +
+    vars.L6 * weights.L6;
+
+  // Φ amplifier
+  const phi_effect = 1 + vars.Phi / 1000;
+
+  // Final index
+  const hap = base * vars.S * phi_effect;
+
+  const zone     = classifyHAPZone(hap);
+  const triggers = evaluateHAPTriggers(hap, vars);
+
+  // Per-layer contributions for breakdown display
+  const layer_contributions = {};
+  for (const [k, w] of Object.entries(weights)) {
+    layer_contributions[k] = parseFloat((vars[k] * w).toFixed(4));
+  }
+
+  return {
+    hap_index: parseFloat(hap.toFixed(4)),
+    zone,
+    triggers,
+    layer_contributions,
+    diagnostics: {
+      base_index:     parseFloat(base.toFixed(4)),
+      phi_effect:     parseFloat(phi_effect.toFixed(4)),
+      synergy:        vars.S,
+      missing_inputs: missing,
+      confidence:     parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars, weights },
+  };
+}

@@ -16,6 +16,7 @@ import Synergy600Panel from './Synergy600Panel.jsx';
 import Atrocitas600Panel from './Atrocitas600Panel.jsx';
 import Narrativa600Panel from './Narrativa600Panel.jsx';
 import AMDPI600Panel from './AMDPI600Panel.jsx';
+import HobbyAnimal600Panel from './HobbyAnimal600Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -550,6 +551,9 @@ export default function Calculator() {
 
       {/* EFU 600.52.3 — AM-DPI Index (PFAS Audit Integration) v1.1 */}
       <AMDPI600Panel />
+
+      {/* EFU 600.30 — Hobby Animal Keeping & Wildlife Extraction Parasitism v1.0 */}
+      <HobbyAnimal600Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>
