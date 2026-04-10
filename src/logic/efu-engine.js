@@ -755,3 +755,105 @@ export function classifyCEWSHappinessState({ cbs_high, bgp, eta_e, eta_h }) {
   };
   return { state, ...STATES[state] };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.0 — 600-as Szinergia-Mátrix (Antiflux Szinergia Alapoperátor)
+// Tier 0 Meta | P_syn Kalibrációs Modul | FC-APPROVED | v1.0 FINAL
+// Reference: EFU 600.0 v1.0 (2026.04.10)
+// ---------------------------------------------------------------------------
+
+const P_SYN_BASE_TABLE = [1.00, 0.85, 0.65, 0.40];
+
+/**
+ * Calculate the base P_syn from the number of active parasites.
+ *
+ * Scale (§IV.1):
+ *   0 active → 1.00  |  1 active → 0.85  |  2 active → 0.65  |  3+ active → 0.40
+ *
+ * @param {number} activeCount  Number of active antiflux modules (0–3)
+ * @returns {{ p_syn_base: number, active: number, label: string }}
+ */
+export function calculatePSynBase(activeCount) {
+  const n = Math.max(0, Math.min(activeCount, 3));
+  const p_syn_base = P_SYN_BASE_TABLE[n];
+  return {
+    p_syn_base,
+    active: n,
+    label: `${n} aktív parazita → P_syn = ${p_syn_base}`,
+    supralinear: n === 3,
+  };
+}
+
+/**
+ * Apply P_syn modifiers to the base value (§IV.2).
+ *
+ * Each modifier is an object: { id, effect, active (bool) }
+ * The modifier effects are summed and applied multiplicatively:
+ *   P_syn_final = clamp(P_syn_base + sum(active_effects), 0, 1)
+ *
+ * @param {number} p_syn_base
+ * @param {Array<{ id: string, effect: number, active: boolean }>} modifiers
+ * @returns {{ p_syn: number, total_mod: number, applied: string[] }}
+ */
+export function applyPSynModifiers(p_syn_base, modifiers = []) {
+  const applied = [];
+  let total_mod = 0;
+  for (const m of modifiers) {
+    if (m.active) {
+      total_mod += m.effect;
+      applied.push(m.id);
+    }
+  }
+  const p_syn = Math.round(Math.max(0, Math.min(p_syn_base + total_mod, 1.0)) * 1000) / 1000;
+  return { p_syn, total_mod: Math.round(total_mod * 1000) / 1000, applied };
+}
+
+/**
+ * Calculate η(W)_eff — the effective wellbeing flux efficiency (§V / 050.3).
+ *
+ * Formula: η(W)_eff = (η(W)_inst × η(W)_epi) × P_syn
+ *
+ * @param {{ eta_w_inst: number, eta_w_epi: number, p_syn: number }} params
+ * @returns {{ eta_w_eff: number, base_product: number, loss_pct: number }}
+ */
+export function calculateEtaWEff({ eta_w_inst, eta_w_epi, p_syn }) {
+  const base_product = Math.round(eta_w_inst * eta_w_epi * 1000) / 1000;
+  const eta_w_eff    = Math.round(base_product * p_syn * 1000) / 1000;
+  const loss_pct     = Math.round((1 - eta_w_eff / Math.max(base_product, 0.001)) * 1000) / 10;
+  return { eta_w_eff, base_product, loss_pct };
+}
+
+/**
+ * Classify CEWS state for the synergy module based on P_syn, N_cogn, EFM.
+ *
+ * CEWS trigger rules (§VII):
+ *   (1) P_syn < 0.50  AND  N_cogn < 0.50  →  CEWS RED
+ *   (2) RED + EFM fixation                →  CEWS CRITICAL
+ *   P_syn < 0.80  OR  N_cogn < 0.70       →  CEWS AMBER
+ *   else                                  →  CEWS GREEN
+ *
+ * @param {{ p_syn: number, n_cogn: number, efm_fixed: boolean, eta_w_eff: number }} params
+ * @returns {{ state: string, label: string, color: string, action: string, eta_critical: boolean }}
+ */
+export function classifyCEWSSynergyState({ p_syn, n_cogn, efm_fixed = false, eta_w_eff }) {
+  const eta_critical = eta_w_eff < 0.35;
+
+  let state;
+  if (p_syn < 0.50 && n_cogn < 0.50 && efm_fixed) {
+    state = 'CRITICAL';
+  } else if (p_syn < 0.50 && n_cogn < 0.50) {
+    state = 'RED';
+  } else if (p_syn < 0.60 || n_cogn < 0.60 || eta_critical) {
+    state = 'AMBER';
+  } else {
+    state = 'GREEN';
+  }
+
+  const STATES = {
+    GREEN:    { label: 'GREEN',    color: '#16a34a', action: 'Monitorozás elegendő' },
+    AMBER:    { label: 'AMBER',    color: '#ca8a04', action: 'Primer prevenció: N_cogn védős, étrendváltás' },
+    RED:      { label: 'RED',      color: '#dc2626', action: '600.53 detox első; kognitív visszanyerés prioritás' },
+    CRITICAL: { label: 'CRITICAL', color: '#7c3aed', action: 'Azonnali rendszerbeavatkozás; EFM-védelem prioritás' },
+  };
+  return { state, ...STATES[state], eta_critical };
+}
