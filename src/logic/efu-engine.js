@@ -1177,23 +1177,38 @@ export function calculateNDI(narrData) {
 }
 
 // ---------------------------------------------------------------------------
-// EFU 600.52.3 — AM-DPI Index (PFAS Audit Integration) v1.0
-// Reference: EFU 600.52.3 AM-DPI v1.0 (2026-04-10)
+// EFU 600.52.3 — AM-DPI Index (PFAS Audit Integration) v1.1
+// Reference: EFU 600.52.3 AM-DPI v1.1 (2026-04-10)
+// Changes v1.1: non-linear normalization, Φ separate amplifier, diagnostics,
+//               configurable weights from MODUL_META_52_3
 // ---------------------------------------------------------------------------
 
 /**
+ * Non-linear normalization: log(1+x) / log(1+threshold)
+ * Models PFAS accumulation more realistically than linear scaling.
+ *
+ * @param {number} x
+ * @param {number} threshold
+ * @returns {number}
+ */
+function normalizeLog(x, threshold) {
+  return Math.log(1 + x) / Math.log(1 + threshold);
+}
+
+/**
  * Zóna klasszifikáció az AM-DPI érték alapján.
- * 4 zóna: ZÖLD/SÁRGA/NARANCS/PIROS
+ * 4 zóna: GREEN/YELLOW/ORANGE/RED
+ * Supports both Infinity and null as "no upper bound".
  *
  * @param {number} amdpi
- * @returns {{ id: string, zone: string, label: string, min: number, max: number,
+ * @returns {{ id: string, zone: string, label: string, min: number, max: number|null,
  *             level: number, sbe: string, multiplier: number, color: string, action: string }}
  */
 export function classifyAMDPIZone(amdpi) {
-  if (amdpi >= 5.0) return { id: 'RED',    zone: 'PIROS',   label: '🔴 Piros',   min: 5.0, max: Infinity, level: 4, sbe: 'SBE-Confirmed_P1', multiplier: 2.0, color: '#dc2626', action: 'Tier 1 visszavonás'   };
-  if (amdpi >= 2.5) return { id: 'ORANGE', zone: 'NARANCS', label: '🟠 Narancs', min: 2.5, max: 5.0,      level: 3, sbe: 'SBE-Confirmed',    multiplier: 1.5, color: '#ea580c', action: 'Forrás karanténbe'    };
-  if (amdpi >= 1.0) return { id: 'YELLOW', zone: 'SÁRGA',   label: '🟡 Sárga',   min: 1.0, max: 2.5,      level: 2, sbe: 'SBE-Probable',     multiplier: 1.2, color: '#ca8a04', action: 'PFAS audit indítás'   };
-  return               { id: 'GREEN',  zone: 'ZÖLD',    label: '🟢 Zöld',    min: 0,   max: 1.0,      level: 1, sbe: 'SBE-Watch',         multiplier: 1.0, color: '#16a34a', action: 'Monitorozás'          };
+  if (amdpi >= 5.0) return { id: 'RED',    zone: 'RED',    label: '🔴 Piros',   min: 5.0, max: null, level: 4, sbe: 'SBE-Confirmed_P1', multiplier: 2.0, color: '#dc2626', action: 'Tier 1 visszavonás'  };
+  if (amdpi >= 2.5) return { id: 'ORANGE', zone: 'ORANGE', label: '🟠 Narancs', min: 2.5, max: 5.0,  level: 3, sbe: 'SBE-Confirmed',    multiplier: 1.5, color: '#ea580c', action: 'Forrás karanténbe'   };
+  if (amdpi >= 1.0) return { id: 'YELLOW', zone: 'YELLOW', label: '🟡 Sárga',   min: 1.0, max: 2.5,  level: 2, sbe: 'SBE-Probable',     multiplier: 1.2, color: '#ca8a04', action: 'PFAS audit indítás'  };
+  return               { id: 'GREEN',  zone: 'GREEN',  label: '🟢 Zöld',    min: 0,   max: 1.0,  level: 1, sbe: 'SBE-Watch',         multiplier: 1.0, color: '#16a34a', action: 'Monitorozás'         };
 }
 
 /**
@@ -1204,68 +1219,99 @@ export function classifyAMDPIZone(amdpi) {
  * @returns {{ ceWS_amber: boolean, ceWS_red: boolean, fire_chief: boolean, tier_withdrawal: boolean, active_triggers: string[] }}
  */
 export function evaluateAMDPITriggers(amdpi, vars) {
-  const ceWS_amber    = amdpi > 1.0 || vars.P2 > 20 || vars.I > 15;
-  const ceWS_red      = amdpi > 2.5 && (vars.P2 > 20 || vars.I > 15);
-  const fire_chief    = vars.Φ > 600 || amdpi > 5.0;
+  const ceWS_amber      = amdpi > 1.0 || vars.P2 > 20 || vars.I > 15;
+  const ceWS_red        = amdpi > 2.5 && (vars.P2 > 20 || vars.I > 15);
+  const fire_chief      = vars.Φ > 600 || amdpi > 5.0;
   const tier_withdrawal = vars.Φ > 600;
 
   const active_triggers = [];
-  if (ceWS_amber)     active_triggers.push('CEWS_AMBER');
-  if (ceWS_red)       active_triggers.push('CEWS_RED');
-  if (fire_chief)     active_triggers.push('FIRE_CHIEF');
+  if (ceWS_amber)  active_triggers.push('CEWS_AMBER');
+  if (ceWS_red)    active_triggers.push('CEWS_RED');
+  if (fire_chief)  active_triggers.push('FIRE_CHIEF');
 
   return { ceWS_amber, ceWS_red, fire_chief, tier_withdrawal, active_triggers };
 }
 
 /**
- * Főmodell: AM-DPI súlyozott eszkalációs index.
+ * Főmodell v1.1: AM-DPI súlyozott eszkalációs index.
  *
- * AM-DPI = (P1×0.15 + P2×0.25 + B×0.10 + I×0.20 + T×0.15 + D×0.05) × S × (1 + Φ/1000)
- * ahol P1,P2,B,I,D,T normalizálva vannak a referencia küszöbükhöz.
+ * Formula:
+ *   base  = Σ normalizeLog(xᵢ, thresholdᵢ) × wᵢ   (P1,P2,B,I,T,D)
+ *   Φ_eff = 1 + normalizeLog(Φ, Φ_threshold) × phi_weight
+ *   AM-DPI = base × S × Φ_eff
+ *
+ * Changes from v1.0:
+ *   - Non-linear log normalization (PFAS bioaccumulation is not linear)
+ *   - Φ as separate multiplicative amplifier (no double-counting)
+ *   - Weights read from config (default: MODUL_META_52_3)
+ *   - diagnostics block: base_index, phi_effect, confidence, missing_inputs
  *
  * @param {{ P1?: number, P2?: number, B?: number, I?: number,
  *            D?: number, T?: number, S?: number, Φ?: number }} readings
+ * @param {{ weights: object, phi_weight: number, efu_penalty_base: number }} [config]
  * @returns {{ amdpi_index: number, zone: object, triggers: object,
- *             efu_penalty: number, variables: { raw: object, normalized: object } }}
+ *             efu_penalty: number, diagnostics: object,
+ *             variables: { raw: object, normalized: object } }}
  */
-export function calculateAMDPI(readings = {}) {
-  const vars = {
-    P1: readings.P1 ?? 50,
-    P2: readings.P2 ?? 8,
-    B:  readings.B  ?? 3,
-    I:  readings.I  ?? 5,
-    D:  readings.D  ?? 0.2,
-    T:  readings.T  ?? 4,
-    S:  readings.S  ?? 1.0,
-    Φ:  readings.Φ  ?? 120,
+export function calculateAMDPI(readings = {}, config) {
+  // Default config — matches MODUL_META_52_3; caller may pass custom config to override
+  const cfg = config ?? {
+    weights: { P1: 0.15, P2: 0.25, B: 0.10, I: 0.20, T: 0.15, D: 0.05 },
+    phi_weight: 0.4,
+    efu_penalty_base: 150,
   };
 
+  const thresholds = { P1: 100, P2: 20, B: 10, I: 15, D: 0.5, T: 11, Φ: 300 };
+  const dflt = { P1: 50, P2: 8, B: 3, I: 5, D: 0.2, T: 4, S: 1.0, Φ: 120 };
+
+  const varKeys = ['P1', 'P2', 'B', 'I', 'D', 'T', 'S', 'Φ'];
+  const missing = [];
+  const vars = {};
+  for (const k of varKeys) {
+    if (readings[k] !== undefined) {
+      vars[k] = readings[k];
+    } else {
+      vars[k] = dflt[k];
+      missing.push(k);
+    }
+  }
+
+  const w = cfg.weights;
+
+  // Non-linear normalization
   const norm = {
-    P1: vars.P1 / 100,
-    P2: vars.P2 / 20,
-    B:  vars.B  / 10,
-    I:  vars.I  / 15,
-    D:  vars.D  / 0.5,
-    T:  vars.T  / 11,
+    P1: normalizeLog(vars.P1, thresholds.P1),
+    P2: normalizeLog(vars.P2, thresholds.P2),
+    B:  normalizeLog(vars.B,  thresholds.B),
+    I:  normalizeLog(vars.I,  thresholds.I),
+    D:  normalizeLog(vars.D,  thresholds.D),
+    T:  normalizeLog(vars.T,  thresholds.T),
   };
 
-  const amdpi = (
-    norm.P1 * 0.15 +
-    norm.P2 * 0.25 +
-    norm.B  * 0.10 +
-    norm.I  * 0.20 +
-    norm.T  * 0.15 +
-    norm.D  * 0.05
-  ) * vars.S * (1 + vars.Φ / 1000);
+  // Weighted base (Φ excluded from sum to avoid double-counting)
+  const base = norm.P1 * w.P1 + norm.P2 * w.P2 + norm.B * w.B +
+               norm.I * w.I  + norm.T * w.T  + norm.D * w.D;
 
-  const zone     = classifyAMDPIZone(amdpi);
+  // Φ as separate amplifier
+  const phi_norm   = normalizeLog(vars.Φ, thresholds.Φ);
+  const phi_effect = 1 + phi_norm * cfg.phi_weight;
+
+  const amdpi  = base * vars.S * phi_effect;
+  const zone   = classifyAMDPIZone(amdpi);
   const triggers = evaluateAMDPITriggers(amdpi, vars);
 
   return {
     amdpi_index: parseFloat(amdpi.toFixed(4)),
     zone,
     triggers,
-    efu_penalty: Math.round(amdpi * 150 * zone.multiplier),
-    variables:   { raw: vars, normalized: norm },
+    efu_penalty: Math.round(amdpi * cfg.efu_penalty_base * zone.multiplier),
+    diagnostics: {
+      base_index:     parseFloat(base.toFixed(4)),
+      phi_effect:     parseFloat(phi_effect.toFixed(4)),
+      synergy:        vars.S,
+      missing_inputs: missing,
+      confidence:     parseFloat((1 - missing.length / varKeys.length).toFixed(2)),
+    },
+    variables: { raw: vars, normalized: norm },
   };
 }

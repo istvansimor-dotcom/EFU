@@ -345,6 +345,33 @@ export default function AMDPI600Panel() {
         </div>
       </SectionBox>
 
+      {/* ── 6b. Diagnosztika ───────────────────────────────────────────────── */}
+      <SectionBox title="Engine Diagnosztika (v1.1)" icon="🔬" accentColor="#374151">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', textAlign: 'center' }}>
+          {[
+            { label: 'Base Index', value: result.diagnostics?.base_index?.toFixed(4) ?? '—', color: '#0369a1' },
+            { label: 'Φ Effect', value: result.diagnostics?.phi_effect?.toFixed(4) ?? '—', color: '#9a3412' },
+            { label: 'Synergy S', value: result.diagnostics?.synergy?.toFixed(2) ?? '—', color: '#374151' },
+            { label: 'Confidence', value: `${((result.diagnostics?.confidence ?? 1) * 100).toFixed(0)}%`, color: '#16a34a' },
+          ].map((item) => (
+            <div key={item.label} style={{ background: '#f9fafb', borderRadius: '6px', padding: '10px' }}>
+              <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '3px' }}>{item.label}</div>
+              <div style={{ fontSize: '18px', fontWeight: '900', color: item.color }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        {result.diagnostics?.missing_inputs?.length > 0 && (
+          <div style={{ marginTop: '8px', padding: '6px 10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: '4px', fontSize: '11px', color: '#92400e' }}>
+            ⚠️ Alapértelmezett értékek használata: {result.diagnostics.missing_inputs.join(', ')}
+          </div>
+        )}
+        <div style={{ marginTop: '8px', fontSize: '10px', color: '#9ca3af', lineHeight: 1.6 }}>
+          <strong>base_index</strong> = Σ log-norm(xᵢ)×wᵢ (P1–D) ·&nbsp;
+          <strong>Φ_effect</strong> = 1 + log-norm(Φ,300) × 0.4 ·&nbsp;
+          <strong>AM-DPI</strong> = base × S × Φ_effect
+        </div>
+      </SectionBox>
+
       {/* ── 7. JSON Kimenet ────────────────────────────────────────────────── */}
       <SectionBox title="Dashboard JSON Kimenet (205.3 kompatibilis)" icon="💾">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -373,7 +400,7 @@ export default function AMDPI600Panel() {
 
       {/* Footer */}
       <div style={{ textAlign: 'center', fontSize: '10px', color: '#9ca3af', paddingBottom: '24px' }}>
-        EFU 600.52.3 AM-DPI · Audit Matrix Detection Protocol Integration v1.0 · 2026-04-10
+        EFU 600.52.3 AM-DPI · Audit Matrix Detection Protocol Integration v1.1 · 2026-04-10
       </div>
     </div>
   );

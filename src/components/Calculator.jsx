@@ -545,6 +545,12 @@ export default function Calculator() {
       {/* EFU 600.56 — Atrocitás Potenciál (A-érték) Modell v1.2 */}
       <Atrocitas600Panel />
 
+      {/* EFU 600.40–42 — Narratíva Degradáció Modell v1.0 */}
+      <Narrativa600Panel />
+
+      {/* EFU 600.52.3 — AM-DPI Index (PFAS Audit Integration) v1.1 */}
+      <AMDPI600Panel />
+
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>
         EFU Framework v5.1 · 1 EFU = 20 kg/day human metabolic throughput · D = 0.3 (S2 calibration) ·

@@ -18,13 +18,14 @@
 export const MODUL_META_52_3 = {
   code:              '600.52.3',
   name:              'AM-DPI Index (PFAS Audit Integration)',
-  description:       'Súlyozott numerikus index az Audit Matrix ↔ 600.7 kétirányú visszacsatoláshoz',
-  version:           '1.0',
+  description:       'Weighted index for Audit Matrix ↔ 600.7 bidirectional feedback',
+  version:           '1.1',
   status:            'AKTÍV / PILOT-READY',
   date:              '2026-04-10',
   parent:            '600.52',
   efu_penalty_base:  150,
-  formula:           'AM-DPI = (P1×0.15 + P2×0.25 + B×0.10 + I×0.20 + T×0.15 + D×0.05) × S × (1 + Φ/1000)',
+  formula:           'AM-DPI = (Σ norm(xᵢ)×wᵢ) × S × (1 + norm(Φ)×phi_weight)',
+  // Externalized weights — tunable without engine change
   weights: {
     P1: 0.15,
     P2: 0.25,
@@ -32,9 +33,9 @@ export const MODUL_META_52_3 = {
     I:  0.20,
     T:  0.15,
     D:  0.05,
-    S:  1.0,
-    Φ:  0.001,
   },
+  // Φ separate amplifier (avoids double-counting in weighted sum)
+  phi_weight: 0.4,
 };
 
 // ---------------------------------------------------------------------------
@@ -174,7 +175,7 @@ export const AMDPI_VARIABLES = {
 export const AMDPI_ZONES = [
   {
     id: 'GREEN',
-    zone: 'ZÖLD',
+    zone: 'GREEN',
     label: '🟢 Zöld',
     min: 0,
     max: 1.0,
@@ -187,7 +188,7 @@ export const AMDPI_ZONES = [
   },
   {
     id: 'YELLOW',
-    zone: 'SÁRGA',
+    zone: 'YELLOW',
     label: '🟡 Sárga',
     min: 1.0,
     max: 2.5,
@@ -200,7 +201,7 @@ export const AMDPI_ZONES = [
   },
   {
     id: 'ORANGE',
-    zone: 'NARANCS',
+    zone: 'ORANGE',
     label: '🟠 Narancs',
     min: 2.5,
     max: 5.0,
@@ -213,10 +214,10 @@ export const AMDPI_ZONES = [
   },
   {
     id: 'RED',
-    zone: 'PIROS',
+    zone: 'RED',
     label: '🔴 Piros',
     min: 5.0,
-    max: Infinity,
+    max: null,
     level: 4,
     sbe: 'SBE-Confirmed_P1',
     multiplier: 2.0,
