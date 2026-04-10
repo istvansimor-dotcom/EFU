@@ -58,9 +58,13 @@ export function normalizeCdsIndices(rawIndices) {
   }
 
   return {
-    CII: clampToRange(rawIndices.CII, 0, 1),
-    VKI: clampToRange(rawIndices.VKI, 0, 1),
-    CFI_total: clampToRange(rawIndices.CFI_total, 0, 3000),
+    CII: clampToRange(rawIndices.CII, CDS_FIELD_SCHEMA.CII.min, CDS_FIELD_SCHEMA.CII.max),
+    VKI: clampToRange(rawIndices.VKI, CDS_FIELD_SCHEMA.VKI.min, CDS_FIELD_SCHEMA.VKI.max),
+    CFI_total: clampToRange(
+      rawIndices.CFI_total,
+      CDS_FIELD_SCHEMA.CFI_total.min,
+      CDS_FIELD_SCHEMA.CFI_total.max,
+    ),
   };
 }
 
