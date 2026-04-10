@@ -1175,3 +1175,97 @@ export function calculateNDI(narrData) {
     variables: { raw: vars, normalized: norm },
   };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.52.3 — AM-DPI Index (PFAS Audit Integration) v1.0
+// Reference: EFU 600.52.3 AM-DPI v1.0 (2026-04-10)
+// ---------------------------------------------------------------------------
+
+/**
+ * Zóna klasszifikáció az AM-DPI érték alapján.
+ * 4 zóna: ZÖLD/SÁRGA/NARANCS/PIROS
+ *
+ * @param {number} amdpi
+ * @returns {{ id: string, zone: string, label: string, min: number, max: number,
+ *             level: number, sbe: string, multiplier: number, color: string, action: string }}
+ */
+export function classifyAMDPIZone(amdpi) {
+  if (amdpi >= 5.0) return { id: 'RED',    zone: 'PIROS',   label: '🔴 Piros',   min: 5.0, max: Infinity, level: 4, sbe: 'SBE-Confirmed_P1', multiplier: 2.0, color: '#dc2626', action: 'Tier 1 visszavonás'   };
+  if (amdpi >= 2.5) return { id: 'ORANGE', zone: 'NARANCS', label: '🟠 Narancs', min: 2.5, max: 5.0,      level: 3, sbe: 'SBE-Confirmed',    multiplier: 1.5, color: '#ea580c', action: 'Forrás karanténbe'    };
+  if (amdpi >= 1.0) return { id: 'YELLOW', zone: 'SÁRGA',   label: '🟡 Sárga',   min: 1.0, max: 2.5,      level: 2, sbe: 'SBE-Probable',     multiplier: 1.2, color: '#ca8a04', action: 'PFAS audit indítás'   };
+  return               { id: 'GREEN',  zone: 'ZÖLD',    label: '🟢 Zöld',    min: 0,   max: 1.0,      level: 1, sbe: 'SBE-Watch',         multiplier: 1.0, color: '#16a34a', action: 'Monitorozás'          };
+}
+
+/**
+ * AM-DPI Trigger logika kiértékelése.
+ *
+ * @param {number} amdpi
+ * @param {{ P2: number, I: number, Φ: number }} vars
+ * @returns {{ ceWS_amber: boolean, ceWS_red: boolean, fire_chief: boolean, tier_withdrawal: boolean, active_triggers: string[] }}
+ */
+export function evaluateAMDPITriggers(amdpi, vars) {
+  const ceWS_amber    = amdpi > 1.0 || vars.P2 > 20 || vars.I > 15;
+  const ceWS_red      = amdpi > 2.5 && (vars.P2 > 20 || vars.I > 15);
+  const fire_chief    = vars.Φ > 600 || amdpi > 5.0;
+  const tier_withdrawal = vars.Φ > 600;
+
+  const active_triggers = [];
+  if (ceWS_amber)     active_triggers.push('CEWS_AMBER');
+  if (ceWS_red)       active_triggers.push('CEWS_RED');
+  if (fire_chief)     active_triggers.push('FIRE_CHIEF');
+
+  return { ceWS_amber, ceWS_red, fire_chief, tier_withdrawal, active_triggers };
+}
+
+/**
+ * Főmodell: AM-DPI súlyozott eszkalációs index.
+ *
+ * AM-DPI = (P1×0.15 + P2×0.25 + B×0.10 + I×0.20 + T×0.15 + D×0.05) × S × (1 + Φ/1000)
+ * ahol P1,P2,B,I,D,T normalizálva vannak a referencia küszöbükhöz.
+ *
+ * @param {{ P1?: number, P2?: number, B?: number, I?: number,
+ *            D?: number, T?: number, S?: number, Φ?: number }} readings
+ * @returns {{ amdpi_index: number, zone: object, triggers: object,
+ *             efu_penalty: number, variables: { raw: object, normalized: object } }}
+ */
+export function calculateAMDPI(readings = {}) {
+  const vars = {
+    P1: readings.P1 ?? 50,
+    P2: readings.P2 ?? 8,
+    B:  readings.B  ?? 3,
+    I:  readings.I  ?? 5,
+    D:  readings.D  ?? 0.2,
+    T:  readings.T  ?? 4,
+    S:  readings.S  ?? 1.0,
+    Φ:  readings.Φ  ?? 120,
+  };
+
+  const norm = {
+    P1: vars.P1 / 100,
+    P2: vars.P2 / 20,
+    B:  vars.B  / 10,
+    I:  vars.I  / 15,
+    D:  vars.D  / 0.5,
+    T:  vars.T  / 11,
+  };
+
+  const amdpi = (
+    norm.P1 * 0.15 +
+    norm.P2 * 0.25 +
+    norm.B  * 0.10 +
+    norm.I  * 0.20 +
+    norm.T  * 0.15 +
+    norm.D  * 0.05
+  ) * vars.S * (1 + vars.Φ / 1000);
+
+  const zone     = classifyAMDPIZone(amdpi);
+  const triggers = evaluateAMDPITriggers(amdpi, vars);
+
+  return {
+    amdpi_index: parseFloat(amdpi.toFixed(4)),
+    zone,
+    triggers,
+    efu_penalty: Math.round(amdpi * 150 * zone.multiplier),
+    variables:   { raw: vars, normalized: norm },
+  };
+}

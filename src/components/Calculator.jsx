@@ -14,6 +14,8 @@ import PFAS600Panel from './PFAS600Panel.jsx';
 import Happiness600Panel from './Happiness600Panel.jsx';
 import Synergy600Panel from './Synergy600Panel.jsx';
 import Atrocitas600Panel from './Atrocitas600Panel.jsx';
+import Narrativa600Panel from './Narrativa600Panel.jsx';
+import AMDPI600Panel from './AMDPI600Panel.jsx';
 
 const inputStyle = {
   width: '100%',
