@@ -1049,3 +1049,129 @@ export function evaluateATriggers(A, dA_dt = 0) {
 
   return { level, cdp_activation, aap_required, escalation, active_triggers: active };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.40–42 — Narratíva Degradáció Modell v1.0
+// Reference: EFU 600.40-42 M4 Narratíva Degrádáció v1.0 FINAL (2026-04-10)
+// ---------------------------------------------------------------------------
+
+/**
+ * 600.41 – Kognitív Narratíva Index
+ * KNI = C_norm × F_norm × (1 - R) × T
+ *
+ * @param {{ C: number, F: number, R: number, T: number }} vars – raw values
+ * @returns {number} KNI
+ */
+export function calculateKNI({ C, F, R, T }) {
+  const C_norm = C / 10;
+  const F_norm = F / 20;
+  return C_norm * F_norm * (1 - R) * T;
+}
+
+/**
+ * 600.42 – Érzelmi Narratíva Index
+ * ENI = E × P_norm × D_norm × S
+ *
+ * @param {{ E: number, P: number, D: number, S: number }} vars – raw values
+ * @returns {number} ENI
+ */
+export function calculateENI({ E, P, D, S }) {
+  const P_norm = P / 0.5;
+  const D_norm = D / 30;
+  return E * P_norm * D_norm * S;
+}
+
+/**
+ * Zóna klasszifikáció az NDI érték alapján.
+ * 5 zóna: ZÖLD/SÁRGA/NARANCS/PIROS/KRITIKUS
+ *
+ * @param {number} ndi
+ * @returns {{ id: string, label: string, m4_status: string, multiplier: number, action: string, color: string }}
+ */
+export function classifyNDIZone(ndi) {
+  if (ndi > 7.0) return { id: 'CRITICAL', label: '⚫ Kritikus', m4_status: 'M4.COLLAPSED',   multiplier: 3.0, action: 'Fire Chief',          color: '#111827' };
+  if (ndi > 3.5) return { id: 'RED',      label: '🔴 Piros',   m4_status: 'M4.POLARIZED',    multiplier: 2.0, action: '700.4 protokoll',      color: '#dc2626' };
+  if (ndi > 1.8) return { id: 'ORANGE',   label: '🟠 Narancs', m4_status: 'M4.FRAGMENTED',   multiplier: 1.5, action: 'M4.CEWS trigger',      color: '#ea580c' };
+  if (ndi > 0.8) return { id: 'YELLOW',   label: '🟡 Sárga',   m4_status: 'M4.DEGRADED',     multiplier: 1.2, action: 'Narratíva audit',      color: '#ca8a04' };
+  return           { id: 'GREEN',   label: '🟢 Zöld',   m4_status: 'M4.STABLE',        multiplier: 1.0, action: 'Monitor',              color: '#16a34a' };
+}
+
+/**
+ * M4 Trigger logika kiértékelése.
+ *
+ * @param {number} ndi
+ * @param {{ N: number, C: number, E: number, F: number, P: number, D: number, Phi: number }} vars
+ * @returns {{ m4_amber: boolean, m4_red: boolean, narrative_emergency: boolean, rapid_polarization: boolean, active_triggers: string[] }}
+ */
+export function evaluateM4Triggers(ndi, vars) {
+  const m4_amber           = ndi > 1.8 || vars.E > 0.7;
+  const m4_red             = ndi > 3.5 && (vars.C > 5 || vars.F > 10);
+  const narrative_emergency = vars.Phi > 500 || vars.N < 0.4;
+  const rapid_polarization  = vars.P > 0.3 && vars.D > 15;
+
+  const active_triggers = [];
+  if (m4_amber)            active_triggers.push('M4_AMBER');
+  if (m4_red)              active_triggers.push('M4_RED');
+  if (narrative_emergency) active_triggers.push('M4_EMERGENCY');
+  if (rapid_polarization)  active_triggers.push('M4_POLAR');
+
+  return { m4_amber, m4_red, narrative_emergency, rapid_polarization, active_triggers };
+}
+
+/**
+ * Főmodell: Narratíva Degradáció Index (NDI)
+ *
+ * NDI = (1-N) × (C×0.15 + E×0.18 + F×0.12 + D×0.08 + T×0.07 + P×0.05) × S × (1 + Φ/1000)
+ * ahol minden változó normalizálva van a referencia küszöbéhez.
+ *
+ * @param {{ N?: number, C?: number, E?: number, F?: number, R?: number,
+ *            D?: number, S?: number, T?: number, P?: number, Phi?: number }} narrData
+ * @returns {{ ndi_index: number, zone: object, m4_status: string, triggers: object,
+ *             submodules: { kni: number, eni: number }, variables: { raw: object, normalized: object } }}
+ */
+export function calculateNDI(narrData) {
+  const vars = {
+    N:   narrData.N   ?? 0.8,
+    C:   narrData.C   ?? 0,
+    E:   narrData.E   ?? 0,
+    F:   narrData.F   ?? 0,
+    R:   narrData.R   ?? 0.7,
+    D:   narrData.D   ?? 5,
+    S:   narrData.S   ?? 1.0,
+    T:   narrData.T   ?? 0,
+    P:   narrData.P   ?? 0,
+    Phi: narrData.Phi ?? 0,
+  };
+
+  const norm = {
+    C: vars.C / 10,
+    E: vars.E,
+    F: vars.F / 20,
+    D: vars.D / 30,
+    T: vars.T,
+    P: vars.P / 0.5,
+  };
+
+  const ndi = (1 - vars.N) * (
+    norm.C * 0.15 +
+    norm.E * 0.18 +
+    norm.F * 0.12 +
+    norm.D * 0.08 +
+    norm.T * 0.07 +
+    norm.P * 0.05
+  ) * vars.S * (1 + vars.Phi / 1000);
+
+  const zone = classifyNDIZone(ndi);
+
+  return {
+    ndi_index:  ndi,
+    zone,
+    m4_status:  zone.m4_status,
+    triggers:   evaluateM4Triggers(ndi, vars),
+    submodules: {
+      kni: calculateKNI(vars),
+      eni: calculateENI(vars),
+    },
+    variables: { raw: vars, normalized: norm },
+  };
+}
