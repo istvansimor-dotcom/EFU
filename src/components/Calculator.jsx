@@ -8,6 +8,7 @@ import {
   FLR_PARASITISM_THRESHOLD,
 } from '../logic/efu-engine.js';
 import CewsPanel from './CewsPanel.jsx';
+import MR600Panel from './MR600Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -520,6 +521,9 @@ export default function Calculator() {
 
       {/* CEWS — Civilization Early Warning System */}
       <CewsPanel />
+
+      {/* EFU 600.00 — Metabolikus Ragadozó v2.1 */}
+      <MR600Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>

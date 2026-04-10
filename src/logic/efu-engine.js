@@ -236,3 +236,160 @@ export function classifyCewsTrigger(score) {
   if (score >= 30) return { id: 'orange', label: 'Orange', labelHu: 'Narancs', color: '#ea580c', action: 'Track A activation' };
   return                   { id: 'red',   label: 'Red',    labelHu: 'Piros',   color: '#dc2626', action: 'Fire Chief Protocol' };
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.00 — Metabolikus Ragadozó (Metabolic Predator) v2.1
+// Tier 0 Root Operator — Domain: A-BIOFIZ / E-GAZDASÁGI / TEMPORÁLIS
+// Reference: EFU 600.00 KALIBRÁLT FINAL OPERÁTOR (2026.03.30)
+// ---------------------------------------------------------------------------
+
+const MR_BETA = 2.1;   // synergy exponent (§II)
+const MR_LAMBDA = 1.5; // P_syn decay coefficient (§III empirical fit)
+
+/**
+ * Sigmoid activation function σ(x) = 1 / (1 + e^(-x))
+ * @param {number} x
+ * @returns {number} value in (0,1)
+ */
+function sigmoid(x) {
+  return 1 / (1 + Math.exp(-x));
+}
+
+/**
+ * Calculate the normalised MR_score from mechanism activations.
+ *
+ * Formula (§II Master Operator):
+ *   MR_score = σ( (ΣM_i) × DCC × Network × e^(β × Syn) )
+ *   where Syn = Σ(M_i × M_j)  for all i < j
+ *
+ * @param {number[]} mechanisms - Array of M1–M12 activation values (each 0–1)
+ * @param {number}   dcc        - Decision-Capture Coefficient 0–1 (default 1)
+ * @param {number}   network    - Network spread factor 0–1 (default 1)
+ * @returns {{ mr_score: number, sum_m: number, syn: number, inner: number }}
+ */
+export function calculateMRScore(mechanisms, dcc = 1, network = 1) {
+  const n = mechanisms.length;
+
+  // ΣM_i — linear sum
+  const sum_m = mechanisms.reduce((acc, m) => acc + m, 0);
+
+  // Syn = Σ(M_i × M_j) for i < j — pairwise synergy
+  let syn = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      syn += mechanisms[i] * mechanisms[j];
+    }
+  }
+
+  const inner = sum_m * dcc * network * Math.exp(MR_BETA * syn);
+  const mr_score = sigmoid(inner);
+
+  return {
+    mr_score: Math.round(mr_score * 1000) / 1000,
+    sum_m:    Math.round(sum_m * 1000) / 1000,
+    syn:      Math.round(syn * 1000) / 1000,
+    inner:    Math.round(inner * 1000) / 1000,
+  };
+}
+
+/**
+ * Calculate the synergy suppression multiplier P_syn.
+ *
+ * Formula (§III):
+ *   P_syn = e^( -λ × MR_score )
+ *
+ * Empirical verification:
+ *   MR_score low  (~0.2) → P_syn ≈ 0.74
+ *   MR_score mid  (~0.5) → P_syn ≈ 0.47
+ *   MR_score high (~0.9) → P_syn ≈ 0.26
+ *
+ * @param {number} mr_score - normalised MR score [0,1]
+ * @param {number} lambda   - decay coefficient (default MR_LAMBDA = 1.5)
+ * @returns {number} P_syn [0,1]
+ */
+export function calculatePSyn(mr_score, lambda = MR_LAMBDA) {
+  const p_syn = Math.exp(-lambda * mr_score);
+  return Math.round(p_syn * 1000) / 1000;
+}
+
+/**
+ * Calculate effective metabolic efficiency η(W)_eff.
+ *
+ * Formula (§VII Interruptor):
+ *   η(W)_eff = Base / (1 + MR_score × Σ600.x) × P_syn
+ *
+ * @param {number} base      - baseline efficiency (0–100 %)
+ * @param {number} mr_score  - normalised MR score [0,1]
+ * @param {number} p_syn     - synergy suppression multiplier [0,1]
+ * @param {number} module_sum - Σ600.x active module load (default 1)
+ * @returns {{ eta_eff: number, reduction_pct: number }}
+ */
+export function calculateEfficiency(base, mr_score, p_syn, module_sum = 1) {
+  const eta_eff = (base / (1 + mr_score * module_sum)) * p_syn;
+  const reduction_pct = base > 0 ? Math.round(((base - eta_eff) / base) * 1000) / 10 : 0;
+  return {
+    eta_eff:       Math.round(eta_eff * 100) / 100,
+    reduction_pct: Math.round(reduction_pct * 10) / 10,
+  };
+}
+
+/**
+ * Calculate the Perception-Reality Divergence (PRD).
+ *
+ * Formula (§X):
+ *   PRD = |η_real - η_perceived|
+ *
+ * @param {number} eta_real      - real efficiency (0–100 %)
+ * @param {number} eta_perceived - perceived efficiency (0–100 %)
+ * @returns {{ prd: number, level: string, color: string }}
+ */
+export function calculatePRD(eta_real, eta_perceived) {
+  const prd = Math.abs(eta_real - eta_perceived) / 100;
+  let level, color;
+  if (prd < 0.1) { level = 'Stabil';           color = '#16a34a'; }
+  else if (prd < 0.3) { level = 'Figyelmeztető'; color = '#ca8a04'; }
+  else if (prd < 0.5) { level = 'Kritikus';      color = '#ea580c'; }
+  else                { level = 'Percepciós vakság'; color = '#dc2626'; }
+  return { prd: Math.round(prd * 1000) / 1000, level, color };
+}
+
+/**
+ * Determine the Θ_collapse state (§VI).
+ *
+ * Collapse conditions:
+ *   dη_W/dt < 0  (efficiency declining)
+ *   dN_cogn/dt < 0 (cognitive capacity declining)
+ *   P_syn < 0.5  (synergy suppression active)
+ *
+ * @param {number}  mr_score       - normalised MR score
+ * @param {number}  p_syn          - synergy multiplier
+ * @param {boolean} eta_declining  - is efficiency trend negative?
+ * @param {boolean} cogn_declining - is cognitive capacity trend negative?
+ * @returns {{ collapse_risk: boolean, tier: string, color: string, flags: string[] }}
+ */
+export function classifyMRState(mr_score, p_syn, eta_declining = false, cogn_declining = false) {
+  const flags = [];
+  if (p_syn < 0.5)         flags.push('P_syn < 0.5 — szinergia szuppresszió');
+  if (eta_declining)       flags.push('dη_W/dt < 0 — hatékonyság csökken');
+  if (cogn_declining)      flags.push('dN_cogn/dt < 0 — kognitív kapacitás csökken');
+  if (mr_score > 0.85)     flags.push('MR_score > 0.85 — TIER 0 tartomány');
+
+  const collapse_risk = p_syn < 0.5 && eta_declining && cogn_declining;
+
+  let tier, color;
+  if (mr_score >= 0.85 && p_syn < 0.5) {
+    tier = 'TIER 0 — SZINERGIKUS MASTER PARAZITA';
+    color = '#7c3aed';
+  } else if (mr_score >= 0.6 || p_syn < 0.65) {
+    tier = 'TIER 1 — AKTÍV PARAZITA';
+    color = '#dc2626';
+  } else if (mr_score >= 0.35) {
+    tier = 'TIER 2 — FEJLŐDŐ PARAZITA';
+    color = '#ea580c';
+  } else {
+    tier = 'EGÉSZSÉGES RENDSZER';
+    color = '#16a34a';
+  }
+
+  return { collapse_risk, tier, color, flags };
+}
