@@ -9,6 +9,8 @@ import {
 } from '../logic/efu-engine.js';
 import CewsPanel from './CewsPanel.jsx';
 import MR600Panel from './MR600Panel.jsx';
+import MSBE600Panel from './MSBE600Panel.jsx';
+import PFAS600Panel from './PFAS600Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -524,6 +526,12 @@ export default function Calculator() {
 
       {/* EFU 600.00 — Metabolikus Ragadozó v2.1 */}
       <MR600Panel />
+
+      {/* EFU 600.2 — Molekuláris Rendszerhatár-Események (MSBE) */}
+      <MSBE600Panel />
+
+      {/* EFU 600.52 — PFAS & Forever Chemicals */}
+      <PFAS600Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>

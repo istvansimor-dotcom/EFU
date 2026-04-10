@@ -487,3 +487,103 @@ export function triggerSBELevel(sbe_level) {
   ];
   return levels[Math.max(0, Math.min(sbe_level, 3))];
 }
+
+// ---------------------------------------------------------------------------
+// EFU 600.52 — PFAS & „Örök Vegyületek" (CFI-B Motor)
+// Bio-fragmentációs Kémiai Index — W_irrev = 0.95 · SEV MAX
+// Reference: EFU 600.52 v1.0 FINAL
+// ---------------------------------------------------------------------------
+
+const CFIB_W_IRREV = 0.95;
+
+/**
+ * Calculate the CFI-B (Chemical Bio-fragmentation Index) score.
+ *
+ * Formula (§3.2):
+ *   CFI-B = Σ (C_i × P_i × W_irrev) × (1 / F_detox)
+ *
+ * Where:
+ *   C_i    = tissue concentration [ng/g]
+ *   P_i    = BAF (bioaccumulation potential, dimensionless)
+ *   W_irrev = reversibility weight (0.95 for PFAS)
+ *   F_detox = actual detox flux [EFU/day] — when 0, CFI-B diverges (capped at 9999)
+ *
+ * @param {Array<{ concentration: number, baf: number }>} compounds - list of PFAS compounds
+ * @param {number} f_detox - detox flux in EFU/day (> 0)
+ * @param {number} w_irrev - reversibility weight (default 0.95)
+ * @returns {{ cfib: number, cfib_capped: number, compounds_sum: number, level: object }}
+ */
+export function calculateCFIB(compounds, f_detox = 1, w_irrev = CFIB_W_IRREV) {
+  const sum = compounds.reduce((acc, { concentration = 0, baf = 1 }) => acc + concentration * baf, 0);
+  const raw = f_detox > 0 ? sum * w_irrev * (1 / f_detox) : Infinity;
+  const cfib_capped = isFinite(raw) ? Math.round(Math.min(raw, 9999) * 100) / 100 : 9999;
+
+  const levels = [
+    { min: 0,   max: 100,  label: 'ZÖLD',    color: '#16a34a', action: 'Nincs beavatkozás' },
+    { min: 100, max: 300,  label: 'SÁRGA',   color: '#ca8a04', action: 'Monitoring fokozás' },
+    { min: 300, max: 600,  label: 'NARANCS', color: '#ea580c', action: 'Forrás-karantén' },
+    { min: 600, max: 9999, label: 'PIROS',   color: '#dc2626', action: 'Azonnali beavatkozás' },
+  ];
+  const level = levels.find((l) => cfib_capped >= l.min && cfib_capped < l.max) ?? levels[levels.length - 1];
+
+  return {
+    cfib:          cfib_capped,
+    cfib_capped,
+    compounds_sum: Math.round(sum * 1000) / 1000,
+    level,
+  };
+}
+
+/**
+ * Classify PFAS audit indicator values against thresholds.
+ *
+ * @param {{ p_lod_water: number, p_lod_blood: number, b_acc: number, i_block: number, afff_rad: number, c_chain: number }} readings
+ * @returns {{ breaches: string[], trigger_protocol: boolean, alerts: string[] }}
+ */
+export function classifyPFASAudit(readings) {
+  const {
+    p_lod_water = 0,
+    p_lod_blood = 0,
+    b_acc       = 0,
+    i_block     = 0,
+    afff_rad    = 0,
+    c_chain     = 0,
+  } = readings;
+
+  const checks = [
+    { id: 'P-LOD',      breach: p_lod_water > 100, msg: `P-LOD (víz) ${p_lod_water} ng/L > 100 ng/L (WHO 2022)` },
+    { id: 'P-LOD²',     breach: p_lod_blood > 20,  msg: `P-LOD² (vér) ${p_lod_blood} ng/mL > 20 ng/mL (EFSA)` },
+    { id: 'B-ACC',      breach: b_acc > 10,         msg: `B-ACC ${b_acc}%/év > 10%/év` },
+    { id: 'I-BLOCK',    breach: i_block > 15,       msg: `I-BLOCK ${i_block}% > 15%` },
+    { id: 'AFFF-RAD',   breach: afff_rad > 500,     msg: `AFFF-RAD ${afff_rad}m > 500m zóna` },
+    { id: 'C-CHAIN',    breach: c_chain > 11,       msg: `C-CHAIN (hal) ${c_chain} ng/g > 11 ng/g` },
+  ];
+
+  const breaches = checks.filter((c) => c.breach).map((c) => c.id);
+  const alerts   = checks.filter((c) => c.breach).map((c) => c.msg);
+
+  // Audit trigger: water + blood thresholds both breached, or i_block > 15
+  const trigger_protocol = (p_lod_water > 100 && p_lod_blood > 20) || i_block > 15;
+
+  return { breaches, trigger_protocol, alerts };
+}
+
+/**
+ * Calculate healing efficiency degradation due to PFAS load.
+ *
+ * Formula (§5.2):
+ *   η_heal = η_max × (1 – 0.4 × (CFI-B_patient / CFI-B_ref))
+ *
+ * Clamped to [0, η_max].
+ *
+ * @param {number} cfib_patient - CFI-B value for the patient
+ * @param {number} eta_max      - maximum healing efficiency (0–1, default 1.0)
+ * @param {number} cfib_ref     - reference CFI-B (default 300 — NARANCS threshold)
+ * @returns {{ eta_heal: number, reduction_pct: number }}
+ */
+export function calculateHealingEfficiency(cfib_patient, eta_max = 1.0, cfib_ref = 300) {
+  const raw = eta_max * (1 - 0.4 * (cfib_patient / cfib_ref));
+  const eta_heal = Math.round(Math.max(0, Math.min(raw, eta_max)) * 1000) / 1000;
+  const reduction_pct = Math.round((1 - eta_heal / eta_max) * 1000) / 10;
+  return { eta_heal, reduction_pct };
+}
