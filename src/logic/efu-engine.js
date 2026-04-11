@@ -2216,7 +2216,7 @@ export function calculateCFIN(inputs = {}) {
 }
 
 // =============================================================================
-// EFU 205.1 — MEII Metabolikus Érték-Intenzitás Index v1.1
+// EFU 800.13 — MEII Metabolikus Érték-Intenzitás Index v1.1
 // =============================================================================
 
 /**

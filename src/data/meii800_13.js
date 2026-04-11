@@ -1,5 +1,5 @@
 /**
- * meii205_1.js — EFU 205.1 Metabolikus Érték-Intenzitás Index (MEII) v1.1
+ * meii800_13.js — EFU 800.13 Metabolikus Érték-Intenzitás Index (MEII) v1.1
  *
  * Sorozat: 200 – Policy Framework / GDP-kiegészítő
  * Cél: Az EFU mint a GDP biofizikai kiegészítője – MEII (Metabolikus Érték-Intenzitás Index)
@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 
 export const MODULE_META_205 = {
-  id: '205.1',
+  id: '800.13',
   version: '1.1',
   title: 'EFU mint GDP-kiegészítő',
   titleEn: 'EFU as GDP Supplement',
@@ -197,7 +197,7 @@ export const GROWTH_SCENARIOS = [
 
 export const IMPLEMENTATION_TIMELINE = [
   { phase: 1, year: '2026 – Pilot',   step: '5 pilot ország (Norvégia, Costa Rica, Szingapúr, Ruanda, Bhután). Első EFU-GDP jelentések.', modules: '00000.1 | 000.7 DQI', color: '#2563eb' },
-  { phase: 2, year: '2027 – OECD',    step: 'OECD hozzáadja az EFU-t a Better Life Indexhez. G7 csúcs megvitatja.', modules: '205.1 | 104.8 Arány-Standard', color: '#7c3aed' },
+  { phase: 2, year: '2027 – OECD',    step: 'OECD hozzáadja az EFU-t a Better Life Indexhez. G7 csúcs megvitatja.', modules: '800.13 | 104.8 Arány-Standard', color: '#7c3aed' },
   { phase: 3, year: '2028 – ENSZ',    step: 'ENSZ SNA satellite account. IMF IV. cikk. konzultációk metabolikus értékeléssel.', modules: '104.45 CO₂ | 205.3 Transzpar. API', color: '#dc2626' },
   { phase: 4, year: '2029+ – Standard', step: 'Minden ENSZ tagállam jelentést tesz. Klímafinanszírozás MEII-célhoz kötve.', modules: 'Teljes EFU v5.1', color: '#111827' },
 ];

@@ -1,5 +1,5 @@
 /**
- * MEII205Panel.jsx — EFU 205.1 Metabolikus Érték-Intenzitás Index v1.1
+ * MEII800Panel.jsx — EFU 800.13 Metabolikus Érték-Intenzitás Index v1.1
  *
  * Sections:
  *   1. Modul fejléc (MEII, GDP vakfoltok, policy nexus)
@@ -24,7 +24,7 @@ import {
   IMPLEMENTATION_TIMELINE,
   POLICY_TOOLS,
   USA_SECTOR_EFU,
-} from '../data/meii205_1.js';
+} from '../data/meii800_13.js';
 import {
   calculateMEII,
   classifyMEIIZone,
@@ -81,7 +81,7 @@ function SectorSlider({ label, unit, value, min, max, step, color, calc, onChang
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function MEII205Panel() {
+export default function MEII800Panel() {
   const [gdpBn,          setGdpBn]          = useState(28000);
   const [popEfuBn,       setPopEfuBn]       = useState(122.3);
   const [industryEfuBn,  setIndustryEfuBn]  = useState(400);
@@ -523,3 +523,4 @@ export default function MEII205Panel() {
     </div>
   );
 }
+___BEGIN___COMMAND_DONE_MARKER___0
