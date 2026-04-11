@@ -16,7 +16,7 @@
 
 import { useState, useMemo } from 'react';
 import {
-  MODULE_META_205,
+  MODULE_META_80013,
   G7_DATA,
   CORPORATE_DATA,
   GROWTH_SCENARIOS,
@@ -126,33 +126,33 @@ export default function MEII800Panel() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <div style={{ fontSize: '11px', opacity: 0.7, marginBottom: '4px' }}>
-              EFU {MODULE_META_205.id} · {MODULE_META_205.series}
+              EFU {MODULE_META_80013.id} · {MODULE_META_80013.series}
             </div>
-            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>{MODULE_META_205.title}</h2>
-            <div style={{ fontSize: '13px', opacity: 0.85, marginTop: '4px' }}>{MODULE_META_205.subtitle}</div>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>{MODULE_META_80013.title}</h2>
+            <div style={{ fontSize: '13px', opacity: 0.85, marginTop: '4px' }}>{MODULE_META_80013.subtitle}</div>
           </div>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            <Badge color="#15803d">{MODULE_META_205.status}</Badge>
-            <Badge color="#374151">v{MODULE_META_205.version}</Badge>
-            <Badge color="#374151">{MODULE_META_205.date}</Badge>
+            <Badge color="#15803d">{MODULE_META_80013.status}</Badge>
+            <Badge color="#374151">v{MODULE_META_80013.version}</Badge>
+            <Badge color="#374151">{MODULE_META_80013.date}</Badge>
           </div>
         </div>
         <div style={{ marginTop: '12px', background: 'rgba(0,0,0,0.25)', borderRadius: '6px', padding: '10px', fontSize: '10px', fontFamily: 'monospace' }}>
-          {MODULE_META_205.formula.split('\n').map((line, i) => (
+          {MODULE_META_80013.formula.split('\n').map((line, i) => (
             <div key={i} style={{ color: '#6ee7b7', marginBottom: '2px' }}>{line}</div>
           ))}
         </div>
         <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {MODULE_META_205.nexus.map(n => (
+          {MODULE_META_80013.nexus.map(n => (
             <span key={n} style={{ fontSize: '9px', background: 'rgba(255,255,255,0.15)', padding: '2px 7px', borderRadius: '10px' }}>⇄ {n}</span>
           ))}
         </div>
         <div style={{ marginTop: '10px', fontSize: '10px', color: '#6ee7b7' }}>
-          📌 {MODULE_META_205.efu_base}
+          📌 {MODULE_META_80013.efu_base}
         </div>
-        {MODULE_META_205.limitations && (
+        {MODULE_META_80013.limitations && (
           <div style={{ marginTop: '8px', fontSize: '9px', opacity: 0.65 }}>
-            ⚠️ {MODULE_META_205.limitations.join(' · ')}
+            ⚠️ {MODULE_META_80013.limitations.join(' · ')}
           </div>
         )}
       </div>
@@ -162,7 +162,7 @@ export default function MEII800Panel() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '6px' }}>❌ Amit a GDP nem lát</div>
-            {MODULE_META_205.gdp_blindspots.map((s, i) => (
+            {MODULE_META_80013.gdp_blindspots.map((s, i) => (
               <div key={i} style={{ fontSize: '11px', color: '#374151', marginBottom: '4px', paddingLeft: '8px', borderLeft: '2px solid #fca5a5' }}>
                 {s}
               </div>
@@ -170,7 +170,7 @@ export default function MEII800Panel() {
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#16a34a', marginBottom: '6px' }}>✅ Amit az EFU hozzáad</div>
-            {MODULE_META_205.efu_adds.map((s, i) => (
+            {MODULE_META_80013.efu_adds.map((s, i) => (
               <div key={i} style={{ fontSize: '11px', color: '#374151', marginBottom: '4px', paddingLeft: '8px', borderLeft: '2px solid #86efac' }}>
                 {s}
               </div>

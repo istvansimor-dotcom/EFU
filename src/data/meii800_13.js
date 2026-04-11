@@ -18,14 +18,14 @@
 // Modul meta
 // ---------------------------------------------------------------------------
 
-export const MODULE_META_205 = {
+export const MODULE_META_80013 = {
   id: '800.13',
   version: '1.1',
   title: 'EFU mint GDP-kiegészítő',
   titleEn: 'EFU as GDP Supplement',
   subtitle: 'Metabolikus Érték-Intenzitás Keretrendszer | Policy Framework',
   subtitleEn: 'Metabolic Value Intensity Framework | Policy Framework',
-  series: '200 – Policy Framework / Biophysical Economics',
+  series: '800 – Policy Framework / Biophysical Economics',
   status: 'FC-APPROVED ✓',
   date: '2026.04.11',
   author: 'Simor István',
