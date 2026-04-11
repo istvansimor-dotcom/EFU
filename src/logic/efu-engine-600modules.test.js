@@ -1297,3 +1297,347 @@ describe('calculateGPS', () => {
     expect(r.triggers.active_triggers).toEqual(directTriggers.active_triggers);
   });
 });
+
+// ============================================================================
+// EFU 600.53 — Digitális Extrakció & AI Parazitizmus (CFI-D)
+// ============================================================================
+
+import {
+  calculateCFID,
+  classifyCFIDZone,
+  evaluateCFIDTriggers,
+  calculateNooCSI,
+  classifyNooCSIZone,
+  evaluateNooCSITriggers,
+  calculateCFIN,
+  classifyCFINZone,
+  evaluateCFINTriggers,
+} from './efu-engine.js';
+
+describe('classifyCFIDZone', () => {
+  it('returns GREEN for cfid < 200', () => {
+    expect(classifyCFIDZone(0).id).toBe('GREEN');
+    expect(classifyCFIDZone(199).id).toBe('GREEN');
+  });
+
+  it('returns YELLOW for cfid 200–499', () => {
+    expect(classifyCFIDZone(200).id).toBe('YELLOW');
+    expect(classifyCFIDZone(499).id).toBe('YELLOW');
+  });
+
+  it('returns ORANGE for cfid 500–999', () => {
+    expect(classifyCFIDZone(500).id).toBe('ORANGE');
+    expect(classifyCFIDZone(999).id).toBe('ORANGE');
+  });
+
+  it('returns RED for cfid 1000–1999', () => {
+    expect(classifyCFIDZone(1000).id).toBe('RED');
+    expect(classifyCFIDZone(1500).id).toBe('RED');
+  });
+
+  it('returns BLACK for cfid >= 2000', () => {
+    expect(classifyCFIDZone(2000).id).toBe('BLACK');
+    expect(classifyCFIDZone(2500).id).toBe('BLACK');
+  });
+});
+
+describe('calculateCFID', () => {
+  it('default inputs return cfid_total as a finite number', () => {
+    const r = calculateCFID({});
+    expect(Number.isFinite(r.cfid_total)).toBe(true);
+    expect(r.cfid_total).toBeGreaterThan(0);
+  });
+
+  it('zero extractive + max protective → GREEN zone', () => {
+    const r = calculateCFID({
+      screen_time: 0,
+      notification_rate: 0,
+      AI_content_ratio: 0,
+      personalization_depth: 0,
+      offline_time: 8,
+      deep_work_hours: 6,
+      sleep_quality_index: 1.0,
+      user_agency_index: 1.0,
+      CFI_D_regenerative: 500,
+      t_years: 0,
+    });
+    expect(r.zone.id).toBe('GREEN');
+  });
+
+  it('max extractive + zero protective → RED or BLACK zone', () => {
+    const r = calculateCFID({
+      screen_time: 16,
+      notification_rate: 1.0,
+      AI_content_ratio: 1.0,
+      personalization_depth: 1.0,
+      offline_time: 0,
+      deep_work_hours: 0,
+      sleep_quality_index: 0,
+      user_agency_index: 0,
+      CFI_D_regenerative: 0,
+      t_years: 5,
+    });
+    expect(['RED', 'BLACK']).toContain(r.zone.id);
+  });
+
+  it('screen_time>4 + cfid>500 → kognitiv_stressz trigger active', () => {
+    const r = calculateCFID({
+      screen_time: 14,
+      notification_rate: 1.0,
+      AI_content_ratio: 0.8,
+      personalization_depth: 0.9,
+      offline_time: 0,
+      deep_work_hours: 0,
+      sleep_quality_index: 0,
+      user_agency_index: 0,
+      CFI_D_regenerative: 0,
+      t_years: 3,
+    });
+    expect(r.triggers.kognitiv_stressz).toBe(true);
+    expect(r.triggers.active_triggers).toContain('KOGNITIV_STRESSZ');
+  });
+
+  it('AI_content_ratio>0.6 + personalization_depth>0.7 + user_agency_index<0.3 → algoritmikus_befogás trigger', () => {
+    const r = calculateCFID({
+      screen_time: 8,
+      notification_rate: 0.8,
+      AI_content_ratio: 0.8,
+      personalization_depth: 0.9,
+      offline_time: 0,
+      deep_work_hours: 0,
+      sleep_quality_index: 0.2,
+      user_agency_index: 0.1,
+      CFI_D_regenerative: 0,
+      t_years: 3,
+    });
+    expect(r.triggers.algoritmikus_befogás).toBe(true);
+    expect(r.triggers.active_triggers).toContain('ALGORITMIKUS_BEFOGÁS');
+  });
+
+  it('confidence is 1.0 when all inputs are provided', () => {
+    const r = calculateCFID({
+      screen_time: 5, notification_rate: 0.5, AI_content_ratio: 0.4,
+      personalization_depth: 0.6, offline_time: 3, deep_work_hours: 2,
+      sleep_quality_index: 0.6, user_agency_index: 0.4,
+      beta: 0.18, alpha_AI: 0.35, CFI_D_regenerative: 50,
+      Debt_rate_D: 0.12, t_years: 3,
+    });
+    expect(r.diagnostics.confidence).toBeCloseTo(1.0, 2);
+  });
+
+  it('zone and triggers are consistent with direct classify/evaluate calls', () => {
+    const r = calculateCFID({
+      screen_time: 8, notification_rate: 0.7, AI_content_ratio: 0.5,
+      personalization_depth: 0.7, offline_time: 2, deep_work_hours: 1,
+      sleep_quality_index: 0.4, user_agency_index: 0.3,
+    });
+    expect(r.zone.id).toBe(classifyCFIDZone(r.cfid_total).id);
+    const dt = evaluateCFIDTriggers(r.cfid_total, r.variables.raw);
+    expect(r.triggers.active_triggers).toEqual(dt.active_triggers);
+  });
+});
+
+// ============================================================================
+// EFU 600.51 — Noosphere Antifluxus Metrikák (Noo-CSI)
+// ============================================================================
+
+describe('classifyNooCSIZone', () => {
+  it('returns GREEN for csi < 2', () => {
+    expect(classifyNooCSIZone(0).id).toBe('GREEN');
+    expect(classifyNooCSIZone(1.99).id).toBe('GREEN');
+  });
+
+  it('returns YELLOW for csi 2–3.99', () => {
+    expect(classifyNooCSIZone(2).id).toBe('YELLOW');
+    expect(classifyNooCSIZone(3.99).id).toBe('YELLOW');
+  });
+
+  it('returns ORANGE for csi 4–6.99', () => {
+    expect(classifyNooCSIZone(4).id).toBe('ORANGE');
+    expect(classifyNooCSIZone(6.99).id).toBe('ORANGE');
+  });
+
+  it('returns RED for csi 7–9.99', () => {
+    expect(classifyNooCSIZone(7).id).toBe('RED');
+    expect(classifyNooCSIZone(8).id).toBe('RED');
+  });
+
+  it('returns CRITICAL for csi >= 10', () => {
+    expect(classifyNooCSIZone(10).id).toBe('CRITICAL');
+    expect(classifyNooCSIZone(12).id).toBe('CRITICAL');
+  });
+});
+
+describe('calculateNooCSI', () => {
+  it('default inputs (HU pilot: DKI=7.2, NPR=3.8, AIF=0.82) return csi_noo in ORANGE zone', () => {
+    const r = calculateNooCSI({});
+    expect(Number.isFinite(r.csi_noo)).toBe(true);
+    expect(r.csi_noo).toBeGreaterThan(4);
+    expect(r.csi_noo).toBeLessThan(7);
+    expect(r.zone.id).toBe('ORANGE');
+  });
+
+  it('DKI=0, NPR=0, AIF=0 → GREEN zone', () => {
+    const r = calculateNooCSI({ DKI: 0, NPR: 0, AIF: 0 });
+    expect(r.zone.id).toBe('GREEN');
+    expect(r.csi_noo).toBe(0);
+  });
+
+  it('DKI>6 → dki_high trigger active', () => {
+    const r = calculateNooCSI({ DKI: 7, NPR: 0, AIF: 0 });
+    expect(r.triggers.dki_high).toBe(true);
+    expect(r.triggers.active_triggers).toContain('DKI_HIGH');
+  });
+
+  it('NPR>3.0 → npr_polarised trigger active', () => {
+    const r = calculateNooCSI({ DKI: 0, NPR: 3.5, AIF: 0 });
+    expect(r.triggers.npr_polarised).toBe(true);
+    expect(r.triggers.active_triggers).toContain('NPR_POLARISED');
+  });
+
+  it('AIF>0.7 → aif_algo_dom trigger active', () => {
+    const r = calculateNooCSI({ DKI: 0, NPR: 0, AIF: 0.8 });
+    expect(r.triggers.aif_algo_dom).toBe(true);
+    expect(r.triggers.active_triggers).toContain('AIF_ALGO_DOM');
+  });
+
+  it('confidence is 1.0 when all inputs are provided', () => {
+    const r = calculateNooCSI({ DKI: 7.2, NPR: 3.8, AIF: 0.82 });
+    expect(r.diagnostics.confidence).toBeCloseTo(1.0, 2);
+  });
+
+  it('zone and triggers consistent with direct classify/evaluate calls', () => {
+    const r = calculateNooCSI({ DKI: 10, NPR: 5, AIF: 0.9 });
+    expect(r.zone.id).toBe(classifyNooCSIZone(r.csi_noo).id);
+    const dt = evaluateNooCSITriggers(r.csi_noo, r.variables.raw);
+    expect(r.triggers.active_triggers).toEqual(dt.active_triggers);
+  });
+});
+
+// ============================================================================
+// EFU 600.58 — UPF Anyagcsere Parazitizmus (CFI-N)
+// ============================================================================
+
+describe('classifyCFINZone', () => {
+  it('returns GREEN for cfin < 200', () => {
+    expect(classifyCFINZone(0).id).toBe('GREEN');
+    expect(classifyCFINZone(199).id).toBe('GREEN');
+  });
+
+  it('returns YELLOW for cfin 200–399', () => {
+    expect(classifyCFINZone(200).id).toBe('YELLOW');
+    expect(classifyCFINZone(399).id).toBe('YELLOW');
+  });
+
+  it('returns ORANGE for cfin 400–699', () => {
+    expect(classifyCFINZone(400).id).toBe('ORANGE');
+    expect(classifyCFINZone(699).id).toBe('ORANGE');
+  });
+
+  it('returns RED for cfin 700–1199', () => {
+    expect(classifyCFINZone(700).id).toBe('RED');
+    expect(classifyCFINZone(1199).id).toBe('RED');
+  });
+
+  it('returns CRITICAL for cfin >= 1200', () => {
+    expect(classifyCFINZone(1200).id).toBe('CRITICAL');
+    expect(classifyCFINZone(2000).id).toBe('CRITICAL');
+  });
+});
+
+describe('calculateCFIN', () => {
+  it('default inputs return cfin_total as a finite number', () => {
+    const r = calculateCFIN({});
+    expect(Number.isFinite(r.cfin_total)).toBe(true);
+    expect(r.cfin_total).toBeGreaterThan(0);
+  });
+
+  it('upf_ratio=0, F_regen_gut=1 → GREEN zone', () => {
+    const r = calculateCFIN({
+      upf_ratio: 0,
+      insulin_resistance: 0,
+      inflammation_index: 0,
+      pfas_synergy: 0,
+      F_regen_gut: 1.0,
+      microbiom_loss: 0,
+      t_years: 0,
+    });
+    expect(r.zone.id).toBe('GREEN');
+  });
+
+  it('upf_ratio=0.8 + low F_regen_gut → RED or CRITICAL zone', () => {
+    const r = calculateCFIN({
+      upf_ratio: 0.8,
+      insulin_resistance: 0.8,
+      inflammation_index: 0.8,
+      pfas_synergy: 0.8,
+      F_regen_gut: 0.1,
+      microbiom_loss: 0.8,
+      Debt_rate_N: 0.15,
+      t_years: 10,
+      cfib_factor: 0.8,
+    });
+    expect(['RED', 'CRITICAL']).toContain(r.zone.id);
+  });
+
+  it('upf_ratio>0.40 + pfas_synergy>0.20 → kombinalt_biokockazat trigger', () => {
+    const r = calculateCFIN({
+      upf_ratio: 0.50,
+      pfas_synergy: 0.30,
+      F_regen_gut: 0.40,
+    });
+    expect(r.triggers.kombinalt_biokockazat).toBe(true);
+    expect(r.triggers.active_triggers).toContain('KOMBINALT_BIOKOCKAZAT');
+  });
+
+  it('cfin>700 → fire_chief trigger', () => {
+    const r = calculateCFIN({
+      upf_ratio: 0.8,
+      insulin_resistance: 0.8,
+      inflammation_index: 0.8,
+      pfas_synergy: 0.8,
+      F_regen_gut: 0.1,
+      microbiom_loss: 0.8,
+      t_years: 10,
+      cfib_factor: 0.8,
+    });
+    expect(r.triggers.fire_chief).toBe(true);
+    expect(r.triggers.active_triggers).toContain('FIRE_CHIEF');
+  });
+
+  it('F_regen_gut<0.30 + microbiom_loss>0.60 → mikrobiom_kolaps trigger', () => {
+    const r = calculateCFIN({
+      F_regen_gut: 0.20,
+      microbiom_loss: 0.70,
+      upf_ratio: 0.4,
+      pfas_synergy: 0.2,
+    });
+    expect(r.triggers.mikrobiom_kolaps).toBe(true);
+    expect(r.triggers.active_triggers).toContain('MIKROBIOM_KOLAPS');
+  });
+
+  it('B_food increases with upf_ratio progression through thresholds', () => {
+    const low  = calculateCFIN({ upf_ratio: 0.10, F_regen_gut: 0.5, t_years: 0 });
+    const mid  = calculateCFIN({ upf_ratio: 0.30, F_regen_gut: 0.5, t_years: 0 });
+    const high = calculateCFIN({ upf_ratio: 0.60, F_regen_gut: 0.5, t_years: 0 });
+    expect(low.components.B_food).toBe(1.0);
+    expect(mid.components.B_food).toBe(1.3);
+    expect(high.components.B_food).toBe(1.7);
+  });
+
+  it('confidence is 1.0 when all inputs are provided', () => {
+    const r = calculateCFIN({
+      upf_ratio: 0.45, insulin_resistance: 0.40, inflammation_index: 0.35,
+      pfas_synergy: 0.30, F_regen_gut: 0.40, microbiom_loss: 0.45,
+      Debt_rate_N: 0.10, t_years: 5, cfib_factor: 0.25,
+    });
+    expect(r.diagnostics.confidence).toBeCloseTo(1.0, 2);
+  });
+
+  it('zone and triggers consistent with direct classify/evaluate calls', () => {
+    const r = calculateCFIN({ upf_ratio: 0.5, pfas_synergy: 0.3, F_regen_gut: 0.35 });
+    expect(r.zone.id).toBe(classifyCFINZone(r.cfin_total).id);
+    const dt = evaluateCFINTriggers(r.cfin_total, r.variables.raw);
+    expect(r.triggers.active_triggers).toEqual(dt.active_triggers);
+  });
+});
