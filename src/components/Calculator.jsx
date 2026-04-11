@@ -25,6 +25,7 @@ import GreshamParasite600Panel from './GreshamParasite600Panel.jsx';
 import DigitalExtraction600Panel from './DigitalExtraction600Panel.jsx';
 import NooMetrics600Panel from './NooMetrics600Panel.jsx';
 import UPFMetabolism600Panel from './UPFMetabolism600Panel.jsx';
+import MEII205Panel from './MEII205Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -586,6 +587,9 @@ export default function Calculator() {
 
       {/* EFU 600.58 — UPF Anyagcsere Parazitizmus v0.2 */}
       <UPFMetabolism600Panel />
+
+      {/* EFU 205.1 — MEII Metabolikus Érték-Intenzitás Index v1.1 */}
+      <MEII205Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>

@@ -2214,3 +2214,129 @@ export function calculateCFIN(inputs = {}) {
     variables: { raw: vars },
   };
 }
+
+// =============================================================================
+// EFU 205.1 — MEII Metabolikus Érték-Intenzitás Index v1.1
+// =============================================================================
+
+/**
+ * Classify MEII value into a zone.
+ * @param {number} meii  - USD/EFU value
+ * @returns {{ id: string, status: string, color: string, note: string }}
+ */
+export function classifyMEIIZone(meii) {
+  if (meii >= 40) return { id: 'ELITE',    status: 'KIVÁLÓ',   color: '#15803d', note: 'Elithatékony – hi-tech, körforgásos struktúra' };
+  if (meii >= 30) return { id: 'HIGH',     status: 'JÓ',       color: '#16a34a', note: 'Magas hatékonyság – fejlett gazdaság' };
+  if (meii >= 15) return { id: 'MEDIUM',   status: 'ÁTLAGOS',  color: '#ca8a04', note: 'Közepes – fejlesztési potenciál' };
+  if (meii >= 5)  return { id: 'LOW',      status: 'GYENGE',   color: '#ea580c', note: 'Alacsony – nehézipar vagy nyersanyag-dominancia' };
+  return               { id: 'CRITICAL', status: 'KRITIKUS', color: '#dc2626', note: 'Kritikusan alacsony – azonnali szerkezeti váltás szükséges' };
+}
+
+/**
+ * Evaluate MEII-based policy triggers.
+ * @param {number} meii
+ * @param {object} vars
+ * @returns {object}
+ */
+export function evaluateMEIITriggers(meii, vars) {
+  const { growth_rate = 0, efu_growth_rate = 0 } = vars;
+
+  const decoupling      = efu_growth_rate < growth_rate;
+  const absolute_decoup = efu_growth_rate <= 0 && growth_rate > 0;
+  const elite_threshold = meii >= 40;
+  const critical_low    = meii < 5;
+  const cbam_needed     = meii < 15;
+
+  const active_triggers = [];
+  if (elite_threshold)  active_triggers.push('ELITE_MEII');
+  if (absolute_decoup)  active_triggers.push('ABSOLUTE_DECOUPLING');
+  if (decoupling)       active_triggers.push('RELATIVE_DECOUPLING');
+  if (critical_low)     active_triggers.push('CRITICAL_LOW_MEII');
+  if (cbam_needed)      active_triggers.push('CBAM_RECOMMENDED');
+
+  return { decoupling, absolute_decoup, elite_threshold, critical_low, cbam_needed, active_triggers };
+}
+
+/**
+ * Main MEII calculation.
+ * @param {object} inputs
+ * @returns {object}
+ */
+export function calculateMEII(inputs = {}) {
+  const defaults = {
+    gdp_bn:               28000,
+    pop_efu_bn:           122.3,
+    industry_efu_bn:      400,
+    agri_efu_bn:          180,
+    waste_efu_bn:         50,
+    lw_destructive:       1.5,
+    lw_luxury:            1.0,
+    lw_essential:         0.65,
+    lw_regenerative:      0.3,
+    lw_digital:           0.45,
+    growth_rate:          0.023,
+    efu_growth_rate:      0.008,
+    tax_rate_usd_per_efu: 0.10,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  const {
+    gdp_bn, pop_efu_bn, industry_efu_bn, agri_efu_bn, waste_efu_bn,
+    lw_destructive, lw_luxury, lw_essential,
+    growth_rate, efu_growth_rate, tax_rate_usd_per_efu,
+  } = vars;
+
+  const efu_total_bn = pop_efu_bn + industry_efu_bn + agri_efu_bn + waste_efu_bn;
+  const meii         = efu_total_bn > 0 ? gdp_bn / efu_total_bn : 0;
+
+  const weighted_efu_bn =
+    pop_efu_bn      * lw_essential  +
+    industry_efu_bn * lw_destructive +
+    agri_efu_bn     * lw_luxury     +
+    waste_efu_bn    * lw_destructive;
+  const meii_w = weighted_efu_bn > 0 ? gdp_bn / weighted_efu_bn : 0;
+
+  const efu_tax_revenue_bn = efu_total_bn * tax_rate_usd_per_efu;
+
+  const meii_china = 4.0;
+  const cbam_ref_factor = meii > meii_china ? (meii - meii_china) : 0;
+
+  const zone     = classifyMEIIZone(meii);
+  const triggers = evaluateMEIITriggers(meii, { ...vars, efu_total_bn });
+
+  return {
+    meii:               parseFloat(meii.toFixed(2)),
+    meii_w:             parseFloat(meii_w.toFixed(2)),
+    efu_total_bn:       parseFloat(efu_total_bn.toFixed(1)),
+    efu_tax_revenue_bn: parseFloat(efu_tax_revenue_bn.toFixed(2)),
+    cbam_ref_factor:    parseFloat(cbam_ref_factor.toFixed(2)),
+    zone,
+    triggers,
+    components: {
+      pop_efu_bn,
+      industry_efu_bn,
+      agri_efu_bn,
+      waste_efu_bn,
+      weighted_efu_bn: parseFloat(weighted_efu_bn.toFixed(1)),
+    },
+    diagnostics: {
+      growth_rate,
+      efu_growth_rate,
+      decoupling_gap:       parseFloat((growth_rate - efu_growth_rate).toFixed(4)),
+      tax_rate_usd_per_efu,
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
