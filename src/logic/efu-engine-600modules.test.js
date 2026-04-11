@@ -18,6 +18,10 @@ import {
   classifyNDIZone,
   evaluateM4Triggers,
   calculateNDI,
+  // 600.69 GPS / Gresham–Parasite Spiral
+  classifyGPSZone,
+  evaluateGPSTriggers,
+  calculateGPS,
 } from './efu-engine.js';
 
 // ============================================================================
@@ -1036,5 +1040,260 @@ describe('calculateNDI', () => {
     const r = calculateNDI({ N: 0.7, C: 3, E: 0.3, F: 4, D: 5, T: 0.3, P: 0.1, S: 1.0, Phi: 501 });
     expect(r.triggers.narrative_emergency).toBe(true);
     expect(r.triggers.active_triggers).toContain('M4_EMERGENCY');
+  });
+});
+
+// ============================================================================
+// EFU 600.69 — Gresham–Parazita Spirál (GPS)
+// ============================================================================
+
+describe('classifyGPSZone', () => {
+  it('returns GREEN for gps < 0.5', () => {
+    const z = classifyGPSZone(0.0);
+    expect(z.id).toBe('GREEN');
+    expect(z.status).toBe('WATCH');
+  });
+
+  it('boundary GREEN/YELLOW at 0.5', () => {
+    expect(classifyGPSZone(0.49).id).toBe('GREEN');
+    const z = classifyGPSZone(0.5);
+    expect(z.id).toBe('YELLOW');
+    expect(z.status).toBe('TRÓJAI FÁZIS');
+  });
+
+  it('boundary YELLOW/ORANGE at 1.0', () => {
+    expect(classifyGPSZone(0.99).id).toBe('YELLOW');
+    const z = classifyGPSZone(1.0);
+    expect(z.id).toBe('ORANGE');
+    expect(z.status).toBe('GRESHAM FÁZIS');
+  });
+
+  it('boundary ORANGE/RED at 2.5', () => {
+    expect(classifyGPSZone(2.49).id).toBe('ORANGE');
+    const z = classifyGPSZone(2.5);
+    expect(z.id).toBe('RED');
+    expect(z.status).toBe('JEVONS FÁZIS');
+  });
+
+  it('boundary RED/CRITICAL at 4.5', () => {
+    expect(classifyGPSZone(4.49).id).toBe('RED');
+    const z = classifyGPSZone(4.5);
+    expect(z.id).toBe('CRITICAL');
+    expect(z.status).toBe('JEVONS ÖSSZEOMLÁS');
+  });
+
+  it('extreme values all return CRITICAL', () => {
+    for (const v of [4.5, 5.0, 10.0, 100.0]) {
+      expect(classifyGPSZone(v).id).toBe('CRITICAL');
+    }
+  });
+
+  it('returns multiplier 1.0 for GREEN', () => {
+    expect(classifyGPSZone(0.3).multiplier).toBe(1.0);
+  });
+
+  it('returns multiplier 3.0 for CRITICAL', () => {
+    expect(classifyGPSZone(5.0).multiplier).toBe(3.0);
+  });
+});
+
+describe('evaluateGPSTriggers', () => {
+  const safeVars = {
+    digital_lock: 0.10, monoblock: 0.30, knowledge_loss: 0.20,
+    entropy_export: 0.20, jim30_loss: 0.30, local_quota_loss: 0.20, Phi: 100,
+  };
+
+  it('all triggers false for safe inputs', () => {
+    const t = evaluateGPSTriggers(0.3, safeVars);
+    expect(t.digital_karanteen).toBe(false);
+    expect(t.monoblock_kor).toBe(false);
+    expect(t.entropy_sinkhole).toBe(false);
+    expect(t.gresham_fire_chief).toBe(false);
+    expect(t.active_triggers).toHaveLength(0);
+  });
+
+  it('DIGITAL_KARANTEEN fires when digital_lock > 0.20', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, digital_lock: 0.21 });
+    expect(t.digital_karanteen).toBe(true);
+    expect(t.active_triggers).toContain('DIGITAL_KARANTEEN');
+  });
+
+  it('DIGITAL_KARANTEEN boundary: exactly 0.20 does not fire', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, digital_lock: 0.20 });
+    expect(t.digital_karanteen).toBe(false);
+  });
+
+  it('MONOBLOCK_KOR fires when monoblock > 0.50', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, monoblock: 0.51 });
+    expect(t.monoblock_kor).toBe(true);
+    expect(t.active_triggers).toContain('MONOBLOCK_KOR');
+  });
+
+  it('MONOBLOCK_KOR fires when jim30_loss > 0.60', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, jim30_loss: 0.61 });
+    expect(t.monoblock_kor).toBe(true);
+    expect(t.active_triggers).toContain('MONOBLOCK_KOR');
+  });
+
+  it('MONOBLOCK_KOR boundary: exactly 0.50 monoblock does not fire', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, monoblock: 0.50, jim30_loss: 0.60 });
+    expect(t.monoblock_kor).toBe(false);
+  });
+
+  it('ENTROPY_SINKHOLE fires when entropy_export > 0.40', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, entropy_export: 0.41 });
+    expect(t.entropy_sinkhole).toBe(true);
+    expect(t.active_triggers).toContain('ENTROPY_SINKHOLE');
+  });
+
+  it('ENTROPY_SINKHOLE fires when local_quota_loss > 0.50', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, local_quota_loss: 0.51 });
+    expect(t.entropy_sinkhole).toBe(true);
+    expect(t.active_triggers).toContain('ENTROPY_SINKHOLE');
+  });
+
+  it('GRESHAM_FIRE_CHIEF fires when gps > 4.0', () => {
+    const t = evaluateGPSTriggers(4.1, safeVars);
+    expect(t.gresham_fire_chief).toBe(true);
+    expect(t.active_triggers).toContain('GRESHAM_FIRE_CHIEF');
+  });
+
+  it('GRESHAM_FIRE_CHIEF fires when jim30_loss > 0.7 AND local_quota_loss > 0.7', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, jim30_loss: 0.71, local_quota_loss: 0.71 });
+    expect(t.gresham_fire_chief).toBe(true);
+  });
+
+  it('GRESHAM_FIRE_CHIEF fires when Phi > 700', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, Phi: 701 });
+    expect(t.gresham_fire_chief).toBe(true);
+    expect(t.active_triggers).toContain('GRESHAM_FIRE_CHIEF');
+  });
+
+  it('GRESHAM_FIRE_CHIEF boundary: jim30_loss 0.7 AND local_quota_loss 0.7 does not fire', () => {
+    const t = evaluateGPSTriggers(0.3, { ...safeVars, jim30_loss: 0.70, local_quota_loss: 0.70 });
+    expect(t.gresham_fire_chief).toBe(false);
+  });
+
+  it('active_triggers lists all active triggers', () => {
+    const t = evaluateGPSTriggers(4.5, {
+      digital_lock: 0.50, monoblock: 0.80, knowledge_loss: 0.70,
+      entropy_export: 0.80, jim30_loss: 0.90, local_quota_loss: 0.90, Phi: 800,
+    });
+    expect(t.active_triggers).toContain('DIGITAL_KARANTEEN');
+    expect(t.active_triggers).toContain('MONOBLOCK_KOR');
+    expect(t.active_triggers).toContain('ENTROPY_SINKHOLE');
+    expect(t.active_triggers).toContain('GRESHAM_FIRE_CHIEF');
+    expect(t.active_triggers).toHaveLength(4);
+  });
+});
+
+describe('calculateGPS', () => {
+  it('returns expected fields', () => {
+    const r = calculateGPS({});
+    expect(r).toHaveProperty('gps_index');
+    expect(r).toHaveProperty('zone');
+    expect(r).toHaveProperty('triggers');
+    expect(r).toHaveProperty('variable_contributions');
+    expect(r).toHaveProperty('diagnostics');
+    expect(r).toHaveProperty('variables');
+  });
+
+  it('formula check with known values: all zeros → gps = 0', () => {
+    const r = calculateGPS({
+      digital_lock: 0, monoblock: 0, knowledge_loss: 0,
+      entropy_export: 0, jim30_loss: 0, local_quota_loss: 0, S: 1.0, Phi: 0,
+    });
+    expect(r.gps_index).toBeCloseTo(0, 5);
+    expect(r.zone.id).toBe('GREEN');
+  });
+
+  it('formula check: all max (1.0) with S=1.0, Phi=0 → base = 1.0 × sum_of_weights', () => {
+    const r = calculateGPS({
+      digital_lock: 1.0, monoblock: 1.0, knowledge_loss: 1.0,
+      entropy_export: 1.0, jim30_loss: 1.0, local_quota_loss: 1.0, S: 1.0, Phi: 0,
+    });
+    // sum of weights = 0.25+0.20+0.15+0.20+0.12+0.08 = 1.0
+    expect(r.gps_index).toBeCloseTo(1.0, 5);
+  });
+
+  it('Phi amplifies GPS proportionally', () => {
+    const base = calculateGPS({ digital_lock: 0.5, monoblock: 0.5, knowledge_loss: 0.5, entropy_export: 0.5, jim30_loss: 0.5, local_quota_loss: 0.5, S: 1.0, Phi: 0 });
+    const amped = calculateGPS({ digital_lock: 0.5, monoblock: 0.5, knowledge_loss: 0.5, entropy_export: 0.5, jim30_loss: 0.5, local_quota_loss: 0.5, S: 1.0, Phi: 1000 });
+    expect(amped.gps_index / base.gps_index).toBeCloseTo(2.0, 5);
+  });
+
+  it('synergy S amplifies GPS proportionally', () => {
+    const base = calculateGPS({ digital_lock: 0.5, monoblock: 0.5, knowledge_loss: 0.5, entropy_export: 0.5, jim30_loss: 0.5, local_quota_loss: 0.5, S: 1.0, Phi: 0 });
+    const amped = calculateGPS({ digital_lock: 0.5, monoblock: 0.5, knowledge_loss: 0.5, entropy_export: 0.5, jim30_loss: 0.5, local_quota_loss: 0.5, S: 2.0, Phi: 0 });
+    expect(amped.gps_index / base.gps_index).toBeCloseTo(2.0, 5);
+  });
+
+  it('uses defaults when no inputs provided', () => {
+    const r = calculateGPS();
+    expect(r.gps_index).toBeGreaterThan(0);
+    expect(r.diagnostics.missing_inputs.length).toBe(8);
+    expect(r.diagnostics.confidence).toBeCloseTo(0, 2);
+  });
+
+  it('partial inputs use remaining defaults and track missing', () => {
+    const r = calculateGPS({ digital_lock: 0.0 });
+    expect(r.diagnostics.missing_inputs).not.toContain('digital_lock');
+    expect(r.diagnostics.missing_inputs).toContain('monoblock');
+  });
+
+  it('variable contributions sum approximately equals base_index', () => {
+    const r = calculateGPS({ digital_lock: 0.4, monoblock: 0.6, knowledge_loss: 0.3, entropy_export: 0.5, jim30_loss: 0.4, local_quota_loss: 0.3, S: 1.0, Phi: 0 });
+    const contribSum = Object.values(r.variable_contributions).reduce((a, b) => a + b, 0);
+    expect(contribSum).toBeCloseTo(r.diagnostics.base_index, 3);
+  });
+
+  it('extreme high inputs reach CRITICAL zone', () => {
+    // With all vars=1.0, S=1.8, Phi=2000: GPS = 1.0 × 1.8 × 3.0 = 5.4 → CRITICAL
+    const r = calculateGPS({
+      digital_lock: 1.0, monoblock: 1.0, knowledge_loss: 1.0,
+      entropy_export: 1.0, jim30_loss: 1.0, local_quota_loss: 1.0, S: 1.8, Phi: 2000,
+    });
+    expect(r.gps_index).toBeGreaterThan(4.5);
+    expect(r.zone.id).toBe('CRITICAL');
+  });
+
+  it('extreme high inputs trigger GRESHAM_FIRE_CHIEF', () => {
+    const r = calculateGPS({
+      digital_lock: 1.0, monoblock: 1.0, knowledge_loss: 1.0,
+      entropy_export: 1.0, jim30_loss: 1.0, local_quota_loss: 1.0, S: 1.8, Phi: 2000,
+    });
+    expect(r.triggers.gresham_fire_chief).toBe(true);
+    expect(r.triggers.active_triggers).toContain('GRESHAM_FIRE_CHIEF');
+  });
+
+  it('minimal inputs reach GREEN zone', () => {
+    const r = calculateGPS({
+      digital_lock: 0.05, monoblock: 0.10, knowledge_loss: 0.05,
+      entropy_export: 0.10, jim30_loss: 0.10, local_quota_loss: 0.05, S: 1.0, Phi: 0,
+    });
+    expect(r.zone.id).toBe('GREEN');
+    expect(r.triggers.active_triggers).toHaveLength(0);
+  });
+
+  it('gps_index is a finite number', () => {
+    const r = calculateGPS({});
+    expect(Number.isFinite(r.gps_index)).toBe(true);
+  });
+
+  it('confidence is 1.0 when all inputs provided', () => {
+    const r = calculateGPS({
+      digital_lock: 0.3, monoblock: 0.4, knowledge_loss: 0.3,
+      entropy_export: 0.3, jim30_loss: 0.3, local_quota_loss: 0.3, S: 1.1, Phi: 100,
+    });
+    expect(r.diagnostics.confidence).toBeCloseTo(1.0, 2);
+  });
+
+  it('zone and triggers are consistent with direct classify/evaluate calls', () => {
+    const inputs = { digital_lock: 0.4, monoblock: 0.6, knowledge_loss: 0.5, entropy_export: 0.6, jim30_loss: 0.5, local_quota_loss: 0.4, S: 1.2, Phi: 300 };
+    const r = calculateGPS(inputs);
+    const directZone = classifyGPSZone(r.gps_index);
+    expect(r.zone.id).toBe(directZone.id);
+    const directTriggers = evaluateGPSTriggers(r.gps_index, r.variables.raw);
+    expect(r.triggers.active_triggers).toEqual(directTriggers.active_triggers);
   });
 });

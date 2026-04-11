@@ -1753,3 +1753,143 @@ export function calculateRIA(inputs = {}) {
     variables: { raw: vars },
   };
 }
+
+// =============================================================================
+// EFU 600.69 — Gresham–Parazita Spirál (GPS) v1.0
+// Metabolikus Extrakció és Rendszerszintű Kiszorítás
+// =============================================================================
+
+/**
+ * GPS zóna osztályozása az index alapján.
+ *
+ * @param {number} gps
+ * @returns {{ id: string, label: string, status: string, multiplier: number,
+ *             color: string, action: string }}
+ */
+export function classifyGPSZone(gps) {
+  if (gps >= 4.5) return { id: 'CRITICAL', label: '⚫ Kritikus', status: 'JEVONS ÖSSZEOMLÁS', multiplier: 3.0, color: '#111827', action: 'Fire Chief + teljes rendszercsere JIM-30 kompatibilis alternatívával' };
+  if (gps >= 2.5) return { id: 'RED',      label: '🔴 Piros',   status: 'JEVONS FÁZIS',       multiplier: 2.0, color: '#dc2626', action: 'Vétó-felülvizsgálat + kötelező lokalizációs program' };
+  if (gps >= 1.0) return { id: 'ORANGE',   label: '🟠 Narancs', status: 'GRESHAM FÁZIS',      multiplier: 1.5, color: '#ea580c', action: 'TÉKK IV. nyilvános bemutatás + AP-SINKHOLE aktiválás' };
+  if (gps >= 0.5) return { id: 'YELLOW',   label: '🟡 Sárga',   status: 'TRÓJAI FÁZIS',       multiplier: 1.2, color: '#ca8a04', action: 'JIM-30 audit + lokális alternatív terv kidolgozása' };
+  return               { id: 'GREEN',    label: '🟢 Zöld',    status: 'WATCH',              multiplier: 1.0, color: '#16a34a', action: 'TÉKK szűrő ellenőrzés – rendszeres audit' };
+}
+
+/**
+ * GPS trigger logika kiértékelése.
+ *
+ * @param {number} gps
+ * @param {{ digital_lock: number, monoblock: number, knowledge_loss: number,
+ *           entropy_export: number, jim30_loss: number, local_quota_loss: number,
+ *           Phi: number }} vars
+ * @returns {{ digital_karanteen: boolean, monoblock_kor: boolean,
+ *             entropy_sinkhole: boolean, gresham_fire_chief: boolean,
+ *             active_triggers: string[] }}
+ */
+export function evaluateGPSTriggers(gps, vars) {
+  const digital_karanteen  = vars.digital_lock > 0.20;
+  const monoblock_kor       = vars.monoblock > 0.50 || vars.jim30_loss > 0.60;
+  const entropy_sinkhole    = vars.entropy_export > 0.40 || vars.local_quota_loss > 0.50;
+  const gresham_fire_chief  = gps > 4.0
+    || (vars.jim30_loss > 0.7 && vars.local_quota_loss > 0.7)
+    || vars.Phi > 700;
+
+  const active_triggers = [];
+  if (digital_karanteen)  active_triggers.push('DIGITAL_KARANTEEN');
+  if (monoblock_kor)       active_triggers.push('MONOBLOCK_KOR');
+  if (entropy_sinkhole)    active_triggers.push('ENTROPY_SINKHOLE');
+  if (gresham_fire_chief)  active_triggers.push('GRESHAM_FIRE_CHIEF');
+
+  return { digital_karanteen, monoblock_kor, entropy_sinkhole, gresham_fire_chief, active_triggers };
+}
+
+/**
+ * Főmodell: Gresham–Parazita Spirál Index (GPS)
+ *
+ * Formula:
+ *   GPS = (digital_lock×0.25 + monoblock×0.20 + knowledge_loss×0.15
+ *          + entropy_export×0.20 + jim30_loss×0.12 + local_quota_loss×0.08)
+ *         × S × (1 + Φ/1000)
+ *
+ * 6 változó súlyozva:
+ *   digital_lock      (0.25) – digitális karantén aránya
+ *   monoblock         (0.20) – roncsolásmentes szétbonthatatlansága
+ *   knowledge_loss    (0.15) – offline szervizkönyv hiánya
+ *   entropy_export    (0.20) – globális logisztikai lánc függőség
+ *   jim30_loss        (0.12) – JIM-30 inkompatibilitás
+ *   local_quota_loss  (0.08) – helyi alkatrész-kvóta vesztés
+ *
+ * @param {{ digital_lock?: number, monoblock?: number, knowledge_loss?: number,
+ *           entropy_export?: number, jim30_loss?: number, local_quota_loss?: number,
+ *           S?: number, Phi?: number }} inputs
+ * @returns {{ gps_index: number, zone: object, triggers: object,
+ *             variable_contributions: object, diagnostics: object, variables: object }}
+ */
+export function calculateGPS(inputs = {}) {
+  const defaults = {
+    digital_lock:     0.30,
+    monoblock:        0.55,
+    knowledge_loss:   0.40,
+    entropy_export:   0.45,
+    jim30_loss:       0.50,
+    local_quota_loss: 0.35,
+    S:                1.15,
+    Phi:              200,
+  };
+  const weights = {
+    digital_lock:     0.25,
+    monoblock:        0.20,
+    knowledge_loss:   0.15,
+    entropy_export:   0.20,
+    jim30_loss:       0.12,
+    local_quota_loss: 0.08,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  // Weighted base sum
+  const base =
+    vars.digital_lock     * weights.digital_lock +
+    vars.monoblock        * weights.monoblock +
+    vars.knowledge_loss   * weights.knowledge_loss +
+    vars.entropy_export   * weights.entropy_export +
+    vars.jim30_loss       * weights.jim30_loss +
+    vars.local_quota_loss * weights.local_quota_loss;
+
+  // Φ amplifier
+  const phi_effect = 1 + vars.Phi / 1000;
+
+  // Final index
+  const gps = base * vars.S * phi_effect;
+
+  const zone     = classifyGPSZone(gps);
+  const triggers = evaluateGPSTriggers(gps, vars);
+
+  const variable_contributions = {};
+  for (const [k, w] of Object.entries(weights)) {
+    variable_contributions[k] = parseFloat((vars[k] * w).toFixed(4));
+  }
+
+  return {
+    gps_index: parseFloat(gps.toFixed(4)),
+    zone,
+    triggers,
+    variable_contributions,
+    diagnostics: {
+      base_index:     parseFloat(base.toFixed(4)),
+      phi_effect:     parseFloat(phi_effect.toFixed(4)),
+      synergy:        vars.S,
+      missing_inputs: missing,
+      confidence:     parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
