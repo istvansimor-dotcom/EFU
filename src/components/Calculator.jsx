@@ -26,6 +26,9 @@ import DigitalExtraction600Panel from './DigitalExtraction600Panel.jsx';
 import NooMetrics600Panel from './NooMetrics600Panel.jsx';
 import UPFMetabolism600Panel from './UPFMetabolism600Panel.jsx';
 import MEII800Panel from './MEII800Panel.jsx';
+import Energia700Panel from './Energia700Panel.jsx';
+import RegenMeres700Panel from './RegenMeres700Panel.jsx';
+import AgroEnergia700Panel from './AgroEnergia700Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -590,6 +593,15 @@ export default function Calculator() {
 
       {/* EFU 800.13 — MEII Metabolikus Érték-Intenzitás Index v1.1 */}
       <MEII800Panel />
+
+      {/* EFU 700.2 — Közösségi Energia Szövetkezet v1.0 */}
+      <Energia700Panel />
+
+      {/* EFU 700.1.1 — Regeneratív Mérési Protokoll v1.0 */}
+      <RegenMeres700Panel />
+
+      {/* EFU 700.1.1.2 — Agro-Energia Szimbiózis v1.0 */}
+      <AgroEnergia700Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>

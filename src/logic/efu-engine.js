@@ -2340,3 +2340,418 @@ export function calculateMEII(inputs = {}) {
     variables: { raw: vars },
   };
 }
+
+// ===========================================================================
+// EFU 700.2 – Közösségi Energia Szövetkezet (CEKS)
+// ===========================================================================
+
+/**
+ * CEKS zóna besorolás (0-10 index alapján).
+ * @param {number} ceks_index
+ */
+export function classifyCEKSZone(ceks_index) {
+  if (ceks_index >= 8) return { id: 'OPTIMAL',  label: '⭐ Optimális',        status: 'BENCHMARK',  color: '#0369a1', action: 'Benchmark protokoll – EU skálázható referenciamodell' };
+  if (ceks_index >= 6) return { id: 'HIGH',     label: '🟢 Magas',            status: 'THRIVING',   color: '#16a34a', action: 'Virágzó szövetkezet – skálázás és replikáció' };
+  if (ceks_index >= 4) return { id: 'MEDIUM',   label: '🟡 Közepes',          status: 'OPERATIVE',  color: '#ca8a04', action: 'Működőképes – governance és pénzügyi optimalizálás' };
+  if (ceks_index >= 2) return { id: 'LOW',      label: '🟠 Alacsony',         status: 'DEVELOPING', color: '#ea580c', action: 'Fejlesztési fázis – kapacitásbővítés szükséges' };
+  return                      { id: 'CRITICAL', label: '�� Kritikus',         status: 'FAILED',     color: '#dc2626', action: 'Alapvető rendszerhibák – komplex újratervezés szükséges' };
+}
+
+/**
+ * CEKS trigger kiértékelés.
+ * @param {object} ceks  – számított értékek (usable_gwh, flr_total, profit_k, ceks_index)
+ * @param {object} vars  – nyers bemenetek
+ */
+export function evaluateCEKSTriggers(ceks, vars) {
+  const energy_deficit     = ceks.usable_gwh < 4.0;
+  const high_flr           = ceks.flr_total > 25;
+  const profit_loss        = ceks.profit_k < 0;
+  const benchmark_reached  = ceks.ceks_index >= 8;
+
+  const active_triggers = [];
+  if (energy_deficit)    active_triggers.push('ENERGY_DEFICIT');
+  if (high_flr)          active_triggers.push('HIGH_FLR');
+  if (profit_loss)       active_triggers.push('PROFIT_LOSS');
+  if (benchmark_reached) active_triggers.push('BENCHMARK_REACHED');
+
+  return { energy_deficit, high_flr, profit_loss, benchmark_reached, active_triggers };
+}
+
+/**
+ * Főmodell: Közösségi Energia Szövetkezet Index (CEKS) – 0-10 skála
+ *
+ * @param {{ solar_mwp?: number, wind_mw?: number, storage_mwh?: number,
+ *            members?: number, governance_q?: number, rte?: number,
+ *            retail_price_mwh?: number, self_suff_target?: number }} inputs
+ */
+export function calculateCEKS(inputs = {}) {
+  const defaults = {
+    solar_mwp: 5, wind_mw: 1, storage_mwh: 4, members: 1000,
+    governance_q: 0.8, rte: 0.77, retail_price_mwh: 250, self_suff_target: 0.70,
+  };
+  const capex_m = 5; // fixed default
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  // Energy
+  const gross_gwh     = vars.solar_mwp * 1.2 + vars.wind_mw * 2.0;
+  const usable_gwh    = gross_gwh * vars.rte;
+  const per_capita_gwh = usable_gwh / vars.members;
+  const energy_ratio  = clamp(per_capita_gwh / 0.006, 0, 1.5);
+
+  // HMI
+  const HMI_bill   = Math.min(energy_ratio, 1.0) * 1.2;
+  const HMI_agency = vars.governance_q * 0.75;
+  const HMI_total  = HMI_bill + HMI_agency;
+
+  // R_future
+  const R_future = 1.0 + clamp(energy_ratio * 0.35 + vars.governance_q * 0.15, 0, 0.8);
+
+  // FLR
+  const flr_inverter    = (1 - vars.rte) * 35;
+  const flr_governance  = (1 - vars.governance_q) * 15 + 10;
+  const flr_total       = flr_inverter + flr_governance;
+
+  // Financial (€k)
+  const self_consumed_gwh  = usable_gwh * vars.self_suff_target;
+  const exported_gwh       = usable_gwh * (1 - vars.self_suff_target);
+  const bill_savings_k     = self_consumed_gwh * 1000 * vars.retail_price_mwh / 1000;
+  const export_revenue_k   = exported_gwh * 1000 * 80 / 1000;
+  const service_k          = 100;
+  const total_revenue_k    = bill_savings_k + export_revenue_k + service_k;
+  const opex_k             = 200 + 100 + capex_m * 50;
+  const profit_k           = total_revenue_k - opex_k;
+
+  // CO2
+  const co2_t = usable_gwh * 1000 * 0.40;
+
+  // CEKS index (0-10)
+  const energy_score       = clamp(energy_ratio, 0, 1);
+  const governance_score   = vars.governance_q;
+  const financial_score    = clamp(profit_k / 700, 0, 1);
+  const sustainability_score = clamp(1 - flr_total / 30, 0, 1);
+  const ceks_index         = (energy_score * 0.40 + governance_score * 0.30 + financial_score * 0.20 + sustainability_score * 0.10) * 10;
+
+  const computed = { usable_gwh, flr_total, profit_k, ceks_index };
+  const zone     = classifyCEKSZone(ceks_index);
+  const triggers = evaluateCEKSTriggers(computed, vars);
+
+  return {
+    ceks_index:         parseFloat(ceks_index.toFixed(3)),
+    zone,
+    triggers,
+    energy: {
+      gross_gwh:        parseFloat(gross_gwh.toFixed(3)),
+      usable_gwh:       parseFloat(usable_gwh.toFixed(3)),
+      per_capita_gwh:   parseFloat(per_capita_gwh.toFixed(6)),
+      energy_ratio:     parseFloat(energy_ratio.toFixed(3)),
+    },
+    hmi: {
+      HMI_bill:         parseFloat(HMI_bill.toFixed(3)),
+      HMI_agency:       parseFloat(HMI_agency.toFixed(3)),
+      HMI_total:        parseFloat(HMI_total.toFixed(3)),
+    },
+    financial: {
+      bill_savings_k:   parseFloat(bill_savings_k.toFixed(1)),
+      export_revenue_k: parseFloat(export_revenue_k.toFixed(1)),
+      total_revenue_k:  parseFloat(total_revenue_k.toFixed(1)),
+      opex_k:           parseFloat(opex_k.toFixed(1)),
+      profit_k:         parseFloat(profit_k.toFixed(1)),
+    },
+    sustainability: {
+      flr_inverter:     parseFloat(flr_inverter.toFixed(2)),
+      flr_governance:   parseFloat(flr_governance.toFixed(2)),
+      flr_total:        parseFloat(flr_total.toFixed(2)),
+      co2_t:            parseFloat(co2_t.toFixed(1)),
+      R_future:         parseFloat(R_future.toFixed(3)),
+    },
+    scores: {
+      energy_score:         parseFloat(energy_score.toFixed(3)),
+      governance_score:     parseFloat(governance_score.toFixed(3)),
+      financial_score:      parseFloat(financial_score.toFixed(3)),
+      sustainability_score: parseFloat(sustainability_score.toFixed(3)),
+    },
+    diagnostics: {
+      capex_m,
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
+
+// ===========================================================================
+// EFU 700.1.1 – Regeneratív Mérési Protokoll (RMP)
+// ===========================================================================
+
+/**
+ * RMP zóna besorolás (0-10 index alapján).
+ * @param {number} rmp_index
+ */
+export function classifyRMPZone(rmp_index) {
+  if (rmp_index >= 8)   return { id: 'OPTIMAL',      label: '⭐ Optimális',  status: 'OPTIMAL',      color: '#0369a1', action: 'Optimális protokoll – replikáció és EU publikáció' };
+  if (rmp_index >= 6.5) return { id: 'REGENERATIVE', label: '🟢 Regeneratív', status: 'REGENERATIVE', color: '#16a34a', action: 'Regeneratív kapacitás aktív – pilot finanszírozás aktiválható' };
+  if (rmp_index >= 5)   return { id: 'BASELINE',     label: '🟡 Alap',       status: 'BASELINE',     color: '#ca8a04', action: 'Alapszintű funkció – mérési rendszer stabilizálása' };
+  if (rmp_index >= 3)   return { id: 'WEAK',         label: '🟠 Gyenge',     status: 'WEAK',         color: '#ea580c', action: 'Gyenge regeneratív kapacitás – szisztematikus fejlesztés' };
+  return                       { id: 'DEGRADED',     label: '🔴 Degradált',  status: 'DEGRADED',     color: '#dc2626', action: 'Talaj- és gazda-állapot kritikus – azonnali beavatkozás' };
+}
+
+/**
+ * RMP trigger kiértékelés.
+ */
+export function evaluateRMPTriggers(rmp, vars) {
+  const soil_critical   = rmp.soil_score < 0.4;
+  const farmer_burnout  = vars.hrv_stress > 0.7 && vars.hrv_rmssd_pct < 0.4;
+  const lora_gap        = vars.lora_coverage < 0.5;
+  const pilot_ready     = rmp.rmp_index >= 6.5;
+
+  const active_triggers = [];
+  if (soil_critical)  active_triggers.push('SOIL_CRITICAL');
+  if (farmer_burnout) active_triggers.push('FARMER_BURNOUT');
+  if (lora_gap)       active_triggers.push('LORA_GAP');
+  if (pilot_ready)    active_triggers.push('PILOT_READY');
+
+  return { soil_critical, farmer_burnout, lora_gap, pilot_ready, active_triggers };
+}
+
+/**
+ * Főmodell: Regeneratív Mérési Protokoll Index (RMP) – 0-10 skála
+ *
+ * @param {{ tdr_moisture?: number, ec_fertility?: number, redox_health?: number,
+ *            som_delta?: number, hrv_rmssd_pct?: number, hrv_stress?: number,
+ *            esm_wellbeing?: number, esm_engagement?: number,
+ *            lora_coverage?: number, sensor_drift?: number }} inputs
+ */
+export function calculateRMP(inputs = {}) {
+  const defaults = {
+    tdr_moisture: 0.55, ec_fertility: 0.60, redox_health: 0.58, som_delta: 0.3,
+    hrv_rmssd_pct: 0.55, hrv_stress: 0.40,
+    esm_wellbeing: 0.62, esm_engagement: 0.58,
+    lora_coverage: 0.75, sensor_drift: 0.08,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  // Soil score
+  const som_norm  = clamp(vars.som_delta * 0.5 + 0.5, 0, 1);
+  const soil_score = vars.tdr_moisture * 0.30 + vars.ec_fertility * 0.25 + vars.redox_health * 0.25 + som_norm * 0.20;
+
+  // HRV score
+  const hrv_score  = vars.hrv_rmssd_pct * (1 - vars.hrv_stress * 0.5);
+
+  // ESM score
+  const esm_score  = vars.esm_wellbeing * 0.55 + vars.esm_engagement * 0.45;
+
+  // System quality
+  const system_q   = vars.lora_coverage * (1 - vars.sensor_drift * 2);
+
+  // NET_EFU
+  const base_efu       = soil_score * 0.40 + hrv_score * 0.30 + esm_score * 0.20 + system_q * 0.10;
+  const net_efu_half   = base_efu * 5.0;
+  const net_efu_annual = net_efu_half * 2;
+
+  // FLR
+  const flr_sensor   = vars.sensor_drift * 100;
+  const flr_human    = (1 - vars.hrv_rmssd_pct) * 10 + vars.hrv_stress * 5;
+  const flr_coverage = (1 - vars.lora_coverage) * 15;
+  const flr_total    = clamp(flr_sensor * 0.40 + flr_human * 0.40 + flr_coverage * 0.20, 5, 20);
+
+  // R_future
+  const R_future = 1.0 + clamp(soil_score * 0.20 + hrv_score * 0.15 + esm_score * 0.10, 0, 0.5);
+
+  // RMP index
+  const rmp_index = base_efu * 10;
+
+  const computed = { soil_score, rmp_index };
+  const zone     = classifyRMPZone(rmp_index);
+  const triggers = evaluateRMPTriggers(computed, vars);
+
+  return {
+    rmp_index:       parseFloat(rmp_index.toFixed(3)),
+    zone,
+    triggers,
+    layers: {
+      soil_score:    parseFloat(soil_score.toFixed(3)),
+      hrv_score:     parseFloat(hrv_score.toFixed(3)),
+      esm_score:     parseFloat(esm_score.toFixed(3)),
+      system_q:      parseFloat(system_q.toFixed(3)),
+    },
+    net_efu: {
+      base_efu:       parseFloat(base_efu.toFixed(4)),
+      net_efu_half:   parseFloat(net_efu_half.toFixed(3)),
+      net_efu_annual: parseFloat(net_efu_annual.toFixed(3)),
+    },
+    sustainability: {
+      flr_sensor:   parseFloat(flr_sensor.toFixed(2)),
+      flr_human:    parseFloat(flr_human.toFixed(2)),
+      flr_coverage: parseFloat(flr_coverage.toFixed(2)),
+      flr_total:    parseFloat(flr_total.toFixed(2)),
+      R_future:     parseFloat(R_future.toFixed(3)),
+    },
+    diagnostics: {
+      som_norm:       parseFloat(som_norm.toFixed(3)),
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
+
+// ===========================================================================
+// EFU 700.1.1.2 – Agro-Energia Szimbiózis (AES)
+// ===========================================================================
+
+/**
+ * AES zóna besorolás (0-10 index alapján).
+ * @param {number} aes_index
+ */
+export function classifyAESZone(aes_index) {
+  if (aes_index >= 8) return { id: 'OPTIMAL',   label: '⭐ Foton-szimbiózis',    status: 'OPTIMAL',    color: '#0369a1', action: 'Optimális foton-szimbiózis – EU benchmark, publikáció kész' };
+  if (aes_index >= 6) return { id: 'SYMBIOTIC', label: '🟢 Szimbiózis',          status: 'SYMBIOTIC',  color: '#16a34a', action: 'Foton-szimbiózis aktív – trilógia kész, skálázás lehetséges' };
+  if (aes_index >= 4) return { id: 'OPERATIVE', label: '🟡 Működő APV',          status: 'OPERATIVE',  color: '#ca8a04', action: 'Működő agrovoltaika – kompakció és variancia csökkentés' };
+  if (aes_index >= 2) return { id: 'WEAK',      label: '🟠 Gyenge integrálás',   status: 'WEAK',       color: '#ea580c', action: 'Gyenge szimbiotikus hatás – LER és RTE optimalizálás' };
+  return                     { id: 'CRITICAL',  label: '🔴 Kritikus',            status: 'CRITICAL',   color: '#dc2626', action: 'Alapvető APV integráció nem működik – rendszer-újratervezés' };
+}
+
+/**
+ * AES trigger kiértékelés.
+ */
+export function evaluateAESTriggers(aes, vars) {
+  const compaction_critical = vars.soil_compaction * (1 - vars.ctf_mitigation) > 0.15;
+  const ler_low             = aes.LER_effective < 1.15;
+  const high_crop_variance  = vars.crop_variance > 0.45;
+  const symbiosis_active    = aes.aes_index >= 6.0;
+
+  const active_triggers = [];
+  if (compaction_critical) active_triggers.push('COMPACTION_CRITICAL');
+  if (ler_low)             active_triggers.push('LER_LOW');
+  if (high_crop_variance)  active_triggers.push('HIGH_CROP_VARIANCE');
+  if (symbiosis_active)    active_triggers.push('SYMBIOSIS_ACTIVE');
+
+  return { compaction_critical, ler_low, high_crop_variance, symbiosis_active, active_triggers };
+}
+
+/**
+ * Főmodell: Agro-Energia Szimbiózis Index (AES) – 0-10 skála
+ *
+ * @param {{ ler?: number, rte_chain?: number, evapot_reduction?: number,
+ *            soil_compaction?: number, crop_variance?: number, shade_gain?: number,
+ *            biomass_rte?: number, ctf_mitigation?: number }} inputs
+ */
+export function calculateAES(inputs = {}) {
+  const defaults = {
+    ler: 1.4, rte_chain: 0.77, evapot_reduction: 0.25, soil_compaction: 0.12,
+    crop_variance: 0.30, shade_gain: 0.35, biomass_rte: 0.40, ctf_mitigation: 0.50,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  // Land
+  const LER_effective    = vars.ler * (1 - vars.soil_compaction * (1 - vars.ctf_mitigation));
+  const net_land_gain_pct = (LER_effective - 1) * 100;
+
+  // Crop
+  const crop_net_gain = vars.shade_gain * (1 - vars.crop_variance * 0.5);
+
+  // Water
+  const water_efficiency = vars.evapot_reduction;
+
+  // Scores
+  const land_score       = clamp((LER_effective - 1) / 0.7, 0, 1);
+  const energy_score_aes = clamp((vars.rte_chain - 0.60) / 0.30, 0, 1);
+  const water_score      = clamp(vars.evapot_reduction / 0.30, 0, 1);
+  const crop_score       = clamp(crop_net_gain / 0.5, 0, 1);
+
+  // EFU Multiplier
+  const efu_multiplier = 1.0 + land_score * 0.35 + energy_score_aes * 0.15 + water_score * 0.10;
+
+  // HMI_gazda
+  const HMI_gazda = land_score * 1.2;
+
+  // R_future
+  const R_future_aes = 1.0 + land_score * 0.30 + energy_score_aes * 0.20;
+
+  // FLR
+  const flr_rte       = (1 - vars.rte_chain) * 30;
+  const flr_compaction = vars.soil_compaction * (1 - vars.ctf_mitigation) * 100 / 2;
+  const flr_crop_risk  = vars.crop_variance * 30;
+  const flr_total_aes  = clamp(flr_rte + flr_compaction + flr_crop_risk, 5, 40);
+
+  // AES index
+  const financial_score = clamp(crop_net_gain / 0.35, 0, 1);
+  const aes_index       = (land_score * 0.35 + energy_score_aes * 0.25 + water_score * 0.20 + crop_score * 0.20) * 10;
+
+  const computed = { LER_effective, aes_index };
+  const zone     = classifyAESZone(aes_index);
+  const triggers = evaluateAESTriggers(computed, vars);
+
+  return {
+    aes_index:           parseFloat(aes_index.toFixed(3)),
+    zone,
+    triggers,
+    land: {
+      LER_effective:      parseFloat(LER_effective.toFixed(3)),
+      net_land_gain_pct:  parseFloat(net_land_gain_pct.toFixed(2)),
+    },
+    crop: {
+      crop_net_gain:      parseFloat(crop_net_gain.toFixed(3)),
+      water_efficiency:   parseFloat(water_efficiency.toFixed(3)),
+    },
+    efu: {
+      efu_multiplier:     parseFloat(efu_multiplier.toFixed(3)),
+      HMI_gazda:          parseFloat(HMI_gazda.toFixed(3)),
+      R_future_aes:       parseFloat(R_future_aes.toFixed(3)),
+    },
+    sustainability: {
+      flr_rte:            parseFloat(flr_rte.toFixed(2)),
+      flr_compaction:     parseFloat(flr_compaction.toFixed(2)),
+      flr_crop_risk:      parseFloat(flr_crop_risk.toFixed(2)),
+      flr_total_aes:      parseFloat(flr_total_aes.toFixed(2)),
+    },
+    scores: {
+      land_score:         parseFloat(land_score.toFixed(3)),
+      energy_score_aes:   parseFloat(energy_score_aes.toFixed(3)),
+      water_score:        parseFloat(water_score.toFixed(3)),
+      crop_score:         parseFloat(crop_score.toFixed(3)),
+      financial_score:    parseFloat(financial_score.toFixed(3)),
+    },
+    diagnostics: {
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
