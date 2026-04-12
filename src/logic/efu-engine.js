@@ -2755,3 +2755,167 @@ export function calculateAES(inputs = {}) {
     variables: { raw: vars },
   };
 }
+
+// ===========================================================================
+// EFU 700.5 – Participatív Költségvetés / dFOS (Distributed Fiscal OS)
+// ===========================================================================
+
+/**
+ * dFOS zóna besorolás (0-10 index alapján).
+ * @param {number} dfos_index
+ */
+export function classifyDFOSZone(dfos_index) {
+  if (dfos_index >= 8) return { id: 'OPTIMAL',  label: '⭐ Optimális dFOS Kernel', status: 'OPTIMAL',  color: '#0369a1', action: 'dFOS kernel aktív – R_future 1.4+, 700 stack closed-loop, globális replikáció' };
+  if (dfos_index >= 6) return { id: 'ACTIVE',   label: '🟢 Aktív dFOS',           status: 'ACTIVE',   color: '#16a34a', action: 'Porto Alegre szint – R_future 1.1–1.3, HMI +2.0 EFU/lakos, korrupció −70%' };
+  if (dfos_index >= 4) return { id: 'EMERGING', label: '🟡 Induló dFOS',          status: 'EMERGING', color: '#ca8a04', action: 'Részvétel elindul – 700.4 pipeline aktiválás, info-aszimmetria csökkentés' };
+  if (dfos_index >= 2) return { id: 'WEAK',     label: '🟠 Gyenge dFOS',          status: 'WEAK',     color: '#ea580c', action: 'Részleges részvétel – magas befogási kockázat, szortíció szükséges' };
+  return                      { id: 'PARASITIC',label: '🔴 Intézményi Parazita',  status: 'PARASITIC',color: '#dc2626', action: '600.18 aktív – top-down döntéshozatal, korrupció strukturális' };
+}
+
+/**
+ * dFOS trigger kiértékelés.
+ */
+export function evaluateDFOSTriggers(dfos, vars) {
+  const capture_risk_high   = vars.capture_risk > 0.40 && vars.sortition_level < 0.30;
+  const info_asymmetry_high = vars.info_asymmetry > 0.35 && vars.knowledge_pipeline < 0.30;
+  const pilot_active        = dfos.dfos_index >= 6.0;
+  const dfos_kernel_active  = dfos.dfos_index >= 8.0 && vars.knowledge_pipeline >= 0.70;
+
+  const active_triggers = [];
+  if (capture_risk_high)   active_triggers.push('CAPTURE_RISK_HIGH');
+  if (info_asymmetry_high) active_triggers.push('INFO_ASYMMETRY_HIGH');
+  if (pilot_active)        active_triggers.push('PILOT_ACTIVE');
+  if (dfos_kernel_active)  active_triggers.push('DFOS_KERNEL_ACTIVE');
+
+  return { capture_risk_high, info_asymmetry_high, pilot_active, dfos_kernel_active, active_triggers };
+}
+
+/**
+ * Főmodell: Distributed Fiscal Operating System Index (dFOS) – 0-10 skála
+ *
+ * @param {{ participation_rate?: number, budget_share?: number, sortition_level?: number,
+ *            alloc_capex_strat?: number, open_budget_pct?: number, public_monitoring?: number,
+ *            capture_risk?: number, knowledge_pipeline?: number, digital_tools?: number,
+ *            info_asymmetry?: number, deliberate_exhaustion?: number,
+ *            population_k?: number }} inputs
+ */
+export function calculateDFOS(inputs = {}) {
+  const defaults = {
+    participation_rate:   0.033,
+    budget_share:         0.175,
+    sortition_level:      0.50,
+    alloc_capex_strat:    0.40,
+    open_budget_pct:      0.85,
+    public_monitoring:    0.70,
+    capture_risk:         0.25,
+    knowledge_pipeline:   0.55,
+    digital_tools:        0.50,
+    info_asymmetry:       0.20,
+    deliberate_exhaustion: 0.12,
+    population_k:         1500,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) {
+      vars[k] = inputs[k];
+    } else {
+      vars[k] = defaults[k];
+      missing.push(k);
+    }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  // Participation score
+  const participation_norm   = clamp(vars.participation_rate / 0.10, 0, 1);
+  const budget_share_norm    = clamp(vars.budget_share / 0.30, 0, 1);
+  const sortition_mitigated  = clamp(vars.sortition_level * (1 - vars.capture_risk * 0.5), 0, 1);
+  const participation_score  = participation_norm * 0.45 + budget_share_norm * 0.30 + sortition_mitigated * 0.25;
+
+  // Transparency score
+  const capture_mitigated    = clamp(1 - vars.capture_risk * (1 - vars.sortition_level * 0.5), 0, 1);
+  const transparency_score   = vars.open_budget_pct * 0.50 + vars.public_monitoring * 0.30 + capture_mitigated * 0.20;
+
+  // Info quality score
+  const exhaustion_mitigated = clamp(vars.deliberate_exhaustion * (1 - vars.digital_tools * 0.45), 0, 0.30);
+  const asymm_mitigated      = clamp(vars.info_asymmetry * (1 - vars.knowledge_pipeline * 0.50), 0, 0.50);
+  const info_quality_score   = vars.knowledge_pipeline * 0.50 + vars.digital_tools * 0.30
+                                - exhaustion_mitigated * 0.40 - asymm_mitigated * 0.30 + 0.5;
+  const info_score           = clamp(info_quality_score, 0, 1);
+
+  // Accountability score
+  const accountability_score = vars.public_monitoring * 0.60 + vars.open_budget_pct * 0.40;
+
+  // dFOS composite index (0-10)
+  const base_dfos = participation_score * 0.30
+                  + transparency_score  * 0.25
+                  + info_score          * 0.25
+                  + accountability_score * 0.20;
+  const dfos_index = base_dfos * 10;
+
+  // NET_EFU (Porto Alegre reference: 1.5M × +0.3 HMI-gain = 450k EFU/év)
+  const hmi_per_capita = clamp(base_dfos * 2.0, 0, 2.5);
+  const net_efu_annual = vars.population_k * 1000 * hmi_per_capita * 0.15;
+
+  // R_future
+  const R_opex_only  = 1.1;
+  const R_capex      = 1.4;
+  const R_future     = R_opex_only + (R_capex - R_opex_only) * vars.alloc_capex_strat * base_dfos;
+
+  // Interstitium (társadalmi bizalom proxy)
+  const interstitium_gain_pct = clamp(base_dfos * 60, 0, 80);
+
+  // Corruption reduction (600.18 antiflux)
+  const corruption_reduction_pct = clamp(base_dfos * 80, 0, 80);
+
+  // FLR components
+  const flr_exhaustion  = exhaustion_mitigated * 100;
+  const flr_capture     = clamp(vars.capture_risk * 100 * (1 - vars.sortition_level * 0.7), 5, 40);
+  const flr_info        = asymm_mitigated * 50;
+  const flr_total_raw   = clamp(flr_exhaustion * 0.33 + flr_capture * 0.40 + flr_info * 0.27, 5, 45);
+  const flr_mitigated   = clamp(flr_total_raw * (1 - vars.digital_tools * 0.30 - vars.knowledge_pipeline * 0.20), 5, 40);
+
+  // Alloc breakdown
+  const R_current = 1.0 + (vars.alloc_capex_strat) * 0.40 * base_dfos;
+
+  const computed  = { dfos_index };
+  const zone      = classifyDFOSZone(dfos_index);
+  const triggers  = evaluateDFOSTriggers(computed, vars);
+
+  return {
+    dfos_index:     parseFloat(dfos_index.toFixed(3)),
+    zone,
+    triggers,
+    participation: {
+      participation_score:  parseFloat(participation_score.toFixed(3)),
+      transparency_score:   parseFloat(transparency_score.toFixed(3)),
+      info_score:           parseFloat(info_score.toFixed(3)),
+      accountability_score: parseFloat(accountability_score.toFixed(3)),
+    },
+    efu: {
+      hmi_per_capita:          parseFloat(hmi_per_capita.toFixed(3)),
+      net_efu_annual:          parseFloat(net_efu_annual.toFixed(0)),
+      R_future:                parseFloat(R_future.toFixed(3)),
+      interstitium_gain_pct:   parseFloat(interstitium_gain_pct.toFixed(1)),
+      corruption_reduction_pct: parseFloat(corruption_reduction_pct.toFixed(1)),
+    },
+    flr: {
+      flr_exhaustion:  parseFloat(flr_exhaustion.toFixed(2)),
+      flr_capture:     parseFloat(flr_capture.toFixed(2)),
+      flr_info:        parseFloat(flr_info.toFixed(2)),
+      flr_total_raw:   parseFloat(flr_total_raw.toFixed(2)),
+      flr_mitigated:   parseFloat(flr_mitigated.toFixed(2)),
+    },
+    alloc: {
+      alloc_capex_strat: vars.alloc_capex_strat,
+      R_current:         parseFloat(R_current.toFixed(3)),
+    },
+    diagnostics: {
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}

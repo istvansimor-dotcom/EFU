@@ -29,6 +29,7 @@ import MEII800Panel from './MEII800Panel.jsx';
 import Energia700Panel from './Energia700Panel.jsx';
 import RegenMeres700Panel from './RegenMeres700Panel.jsx';
 import AgroEnergia700Panel from './AgroEnergia700Panel.jsx';
+import ParticipatiBudget700Panel from './ParticipatiBudget700Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -602,6 +603,9 @@ export default function Calculator() {
 
       {/* EFU 700.1.1.2 — Agro-Energia Szimbiózis v1.0 */}
       <AgroEnergia700Panel />
+
+      {/* EFU 700.5 — Participatív Költségvetés / dFOS v1.2 */}
+      <ParticipatiBudget700Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>
