@@ -2919,3 +2919,433 @@ export function calculateDFOS(inputs = {}) {
     variables: { raw: vars },
   };
 }
+
+// ===========================================================================
+// EFU 700.8 – Univerzális Alapszolgáltatások (UBS)
+// ===========================================================================
+
+export function classifyUBSZone(ubs_index) {
+  if (ubs_index >= 8) return { id: 'UNIVERSAL',   label: '⭐ Univerzális UBS',      status: 'UNIVERSAL',   color: '#0369a1', action: 'Teljes UBS kernel – R_future 1.3+, bölcsőde-PhD ingyenes, NHS szint' };
+  if (ubs_index >= 6) return { id: 'WELFARE',     label: '🟢 Jóléti Állam',         status: 'WELFARE',     color: '#16a34a', action: 'Erős jóléti rendszer – EU standard, HMI +4.5 EFU/fő, korrupció csökken' };
+  if (ubs_index >= 4) return { id: 'MIXED',       label: '🟡 Vegyes Rendszer',       status: 'MIXED',       color: '#ca8a04', action: 'Vegyes köz-magán – fedezeti hiányok, szubvenciók szükségesek' };
+  if (ubs_index >= 2) return { id: 'PARTIAL',     label: '🟠 Részleges Rendszer',    status: 'PARTIAL',     color: '#ea580c', action: 'Szelektív juttatások – jövedelemi korlátok, részleges lefedettség' };
+  return                     { id: 'MARKET_ONLY', label: '🔴 Piaci Dominancia',      status: 'MARKET_ONLY', color: '#dc2626', action: '600.5 aktív – alapszolgáltatások privatizálva, hozzáférési egyenlőtlenség kritikus' };
+}
+
+export function evaluateUBSTriggers(result, vars) {
+  const market_failure = vars.healthcare_coverage < 0.60 && vars.market_commodification > 0.60;
+  const low_housing    = vars.affordable_housing_pct < 0.30;
+  const nhs_active     = result.ubs_index >= 6.0;
+  const full_ubs       = result.ubs_index >= 8.0 && vars.education_free >= 0.80;
+
+  const active_triggers = [];
+  if (market_failure) active_triggers.push('MARKET_FAILURE');
+  if (low_housing)    active_triggers.push('LOW_HOUSING');
+  if (nhs_active)     active_triggers.push('NHS_ACTIVE');
+  if (full_ubs)       active_triggers.push('FULL_UBS');
+
+  return { market_failure, low_housing, nhs_active, full_ubs, active_triggers };
+}
+
+export function calculateUBS(inputs = {}) {
+  const defaults = {
+    healthcare_coverage:      0.80,
+    education_free:           0.70,
+    affordable_housing_pct:   0.55,
+    public_transport_subsidy: 0.60,
+    internet_access:          0.75,
+    market_commodification:   0.40,
+    population_m:             67,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) { vars[k] = inputs[k]; } else { vars[k] = defaults[k]; missing.push(k); }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  const healthcare_score = vars.healthcare_coverage * (1 - vars.market_commodification * 0.3);
+  const education_score  = vars.education_free;
+  const housing_score    = vars.affordable_housing_pct;
+  const transport_score  = vars.public_transport_subsidy;
+  const internet_score   = vars.internet_access;
+
+  const base_ubs   = healthcare_score * 0.30 + education_score * 0.25 + housing_score * 0.25 + transport_score * 0.10 + internet_score * 0.10;
+  const ubs_index  = base_ubs * 10;
+
+  const hmi_per_capita      = clamp(base_ubs * 4.5, 0, 5.0);
+  const net_efu_annual      = vars.population_m * 1_000_000 * hmi_per_capita * 0.04;
+  const R_future            = 1.0 + base_ubs * 0.3;
+  const interstitium_gain_pct = clamp(base_ubs * 35, 0, 40);
+
+  const computed = { ubs_index };
+  const zone     = classifyUBSZone(ubs_index);
+  const triggers = evaluateUBSTriggers(computed, vars);
+
+  return {
+    ubs_index: parseFloat(ubs_index.toFixed(3)),
+    zone,
+    triggers,
+    scores: {
+      healthcare_score: parseFloat(healthcare_score.toFixed(3)),
+      education_score:  parseFloat(education_score.toFixed(3)),
+      housing_score:    parseFloat(housing_score.toFixed(3)),
+      transport_score:  parseFloat(transport_score.toFixed(3)),
+      internet_score:   parseFloat(internet_score.toFixed(3)),
+    },
+    efu: {
+      hmi_per_capita:        parseFloat(hmi_per_capita.toFixed(3)),
+      net_efu_annual:        parseFloat(net_efu_annual.toFixed(0)),
+      R_future:              parseFloat(R_future.toFixed(3)),
+      interstitium_gain_pct: parseFloat(interstitium_gain_pct.toFixed(1)),
+    },
+    diagnostics: {
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
+
+// ===========================================================================
+// EFU 700.9 – Közösségi Valuták és Időbanka
+// ===========================================================================
+
+export function classifyCVZone(cv_index) {
+  if (cv_index >= 8) return { id: 'COMMUNITY_ECONOMY', label: '⭐ Közösségi Gazdaság',      status: 'COMMUNITY_ECONOMY', color: '#0369a1', action: 'Teljes közösségi gazdaság – R_future 1.2+, fiat leakage < 20%, globális replikáció' };
+  if (cv_index >= 6) return { id: 'ACTIVE',            label: '🟢 Aktív Közösségi Valuta', status: 'ACTIVE',            color: '#16a34a', action: 'WIR/Brixton szint – időbanka aktív, helyi multiplikátor +40%, HMI +1.8 EFU' };
+  if (cv_index >= 4) return { id: 'EMERGING',          label: '🟡 Kibontakozó Rendszer',   status: 'EMERGING',          color: '#ca8a04', action: 'Növekvő közösségi gazdaság – demurrage aktiválva, fiat leak csökken' };
+  if (cv_index >= 2) return { id: 'PILOT',             label: '🟠 Pilot Fázis',            status: 'PILOT',             color: '#ea580c', action: 'Kis pilot – kritikus tömeg alatti, fiat dominancia fennáll' };
+  return                    { id: 'FIAT_ONLY',          label: '🔴 Fiat Dominancia',        status: 'FIAT_ONLY',         color: '#dc2626', action: '600.2 aktív – teljes fiat kiszivárgás, helyi gazdaság elsorvad' };
+}
+
+export function evaluateCVTriggers(result, vars) {
+  const critical_mass_low = vars.participants_k < 0.5 && vars.time_banking_activity < 0.30;
+  const fiat_dominant     = vars.fiat_leak_out > 0.70;
+  const timebank_active   = result.cv_index >= 6.0;
+  const community_economy = result.cv_index >= 8.0 && vars.mutual_aid_strength >= 0.70;
+
+  const active_triggers = [];
+  if (critical_mass_low) active_triggers.push('CRITICAL_MASS_LOW');
+  if (fiat_dominant)     active_triggers.push('FIAT_DOMINANT');
+  if (timebank_active)   active_triggers.push('TIMEBANK_ACTIVE');
+  if (community_economy) active_triggers.push('COMMUNITY_ECONOMY');
+
+  return { critical_mass_low, fiat_dominant, timebank_active, community_economy, active_triggers };
+}
+
+export function calculateCV(inputs = {}) {
+  const defaults = {
+    local_circulation_boost: 0.35,
+    time_banking_activity:   0.40,
+    demurrage_rate:          0.01,
+    speculation_free:        0.70,
+    mutual_aid_strength:     0.45,
+    fiat_leak_out:           0.55,
+    participants_k:          100,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) { vars[k] = inputs[k]; } else { vars[k] = defaults[k]; missing.push(k); }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  const demurrage_norm  = clamp(vars.demurrage_rate / 0.05, 0, 1);
+  const community_trust = (vars.mutual_aid_strength + vars.speculation_free) / 2;
+  const local_score     = vars.local_circulation_boost * (1 - vars.fiat_leak_out * 0.4);
+  const base_cv         = local_score * 0.30 + vars.time_banking_activity * 0.25 + demurrage_norm * 0.20 + community_trust * 0.25;
+  const cv_index        = base_cv * 10;
+
+  const hmi_per_participant = clamp(base_cv * 1.8, 0, 2.0);
+  const net_efu_annual      = vars.participants_k * 1000 * hmi_per_participant * 0.194;
+  const R_future            = 1.0 + base_cv * 0.2;
+  const interstitium_gain_pct = clamp(base_cv * 40, 0, 45);
+
+  const computed = { cv_index };
+  const zone     = classifyCVZone(cv_index);
+  const triggers = evaluateCVTriggers(computed, vars);
+
+  return {
+    cv_index: parseFloat(cv_index.toFixed(3)),
+    zone,
+    triggers,
+    scores: {
+      local_score:     parseFloat(local_score.toFixed(3)),
+      demurrage_norm:  parseFloat(demurrage_norm.toFixed(3)),
+      community_trust: parseFloat(community_trust.toFixed(3)),
+      time_banking_score: parseFloat(vars.time_banking_activity.toFixed(3)),
+    },
+    efu: {
+      hmi_per_participant:   parseFloat(hmi_per_participant.toFixed(3)),
+      net_efu_annual:        parseFloat(net_efu_annual.toFixed(0)),
+      R_future:              parseFloat(R_future.toFixed(3)),
+      interstitium_gain_pct: parseFloat(interstitium_gain_pct.toFixed(1)),
+    },
+    diagnostics: {
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
+
+// ===========================================================================
+// EFU 700.10 – Munkás Önigazgatás és Kooperatív Vállalatok
+// ===========================================================================
+
+export function classifyCOOPZone(coop_index) {
+  if (coop_index >= 8) return { id: 'WORKER_OWNED',  label: '⭐ Munkástulajdonú Vállalat', status: 'WORKER_OWNED',  color: '#0369a1', action: 'Mondragon szint – teljes munkástulajdon, R_future 1.4+, K+F aktív, globális modell' };
+  if (coop_index >= 6) return { id: 'COOPERATIVE',   label: '🟢 Kooperatív Vállalat',     status: 'COOPERATIVE',   color: '#16a34a', action: 'Emilia-Romagna szint – munkás-tulajdon domináns, HMI +3.8 EFU/munkás, stabilitás nő' };
+  if (coop_index >= 4) return { id: 'TRANSITIONAL',  label: '🟡 Átmeneti Modell',         status: 'TRANSITIONAL',  color: '#ca8a04', action: 'Részleges kooperatív elemek – ESOP, profit sharing indul, demokrácia fejlődik' };
+  if (coop_index >= 2) return { id: 'HIERARCHICAL',  label: '🟠 Hierarchikus Cég',        status: 'HIERARCHICAL',  color: '#ea580c', action: 'Hagyományos hierarchia – minimális munkásrészvétel, tőkejövedelem domináns' };
+  return                      { id: 'EXPLOITATIVE',  label: '🔴 Kizsákmányoló Vállalat',  status: 'EXPLOITATIVE',  color: '#dc2626', action: '600.5 aktív – tőke-felhalmozás, munkás-érdekek semmibevétele, bérkizsákmányolás' };
+}
+
+export function evaluateCOOPTriggers(result, vars) {
+  const wage_inequality_high = vars.wage_ratio_ceo_worker > 50 && vars.worker_ownership_pct < 0.20;
+  const low_profit_sharing   = vars.profit_sharing_ratio < 0.10;
+  const coop_active          = result.coop_index >= 6.0;
+  const mondragon_model      = result.coop_index >= 8.0 && vars.workplace_democracy >= 0.70;
+
+  const active_triggers = [];
+  if (wage_inequality_high) active_triggers.push('WAGE_INEQUALITY_HIGH');
+  if (low_profit_sharing)   active_triggers.push('LOW_PROFIT_SHARING');
+  if (coop_active)          active_triggers.push('COOP_ACTIVE');
+  if (mondragon_model)      active_triggers.push('MONDRAGON_MODEL');
+
+  return { wage_inequality_high, low_profit_sharing, coop_active, mondragon_model, active_triggers };
+}
+
+export function calculateCOOP(inputs = {}) {
+  const defaults = {
+    worker_ownership_pct:    0.80,
+    profit_sharing_ratio:    0.60,
+    workplace_democracy:     0.75,
+    job_security:            0.85,
+    wage_ratio_ceo_worker:   6,
+    rd_investment_pct:       0.045,
+    workers_k:               81,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) { vars[k] = inputs[k]; } else { vars[k] = defaults[k]; missing.push(k); }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  const wage_ratio_norm  = clamp(1 - (vars.wage_ratio_ceo_worker - 1) / 299, 0, 1);
+  const rd_norm          = clamp(vars.rd_investment_pct / 0.10, 0, 1);
+  const ownership_score  = vars.worker_ownership_pct * (1 + rd_norm * 0.2);
+  const base_coop_raw    = clamp(ownership_score * 0.30 + vars.profit_sharing_ratio * 0.25 + vars.workplace_democracy * 0.25 + vars.job_security * 0.20, 0, 1);
+  const base_coop        = base_coop_raw * Math.pow(wage_ratio_norm, 0.3);
+  const coop_index       = base_coop * 10;
+
+  const hmi_per_worker      = clamp(base_coop * 3.8, 0, 4.5);
+  const net_efu_annual      = vars.workers_k * 1000 * hmi_per_worker * 0.110;
+  const R_future            = 1.0 + base_coop * 0.4;
+  const interstitium_gain_pct = clamp(base_coop * 50, 0, 55);
+
+  const computed = { coop_index };
+  const zone     = classifyCOOPZone(coop_index);
+  const triggers = evaluateCOOPTriggers(computed, vars);
+
+  return {
+    coop_index: parseFloat(coop_index.toFixed(3)),
+    zone,
+    triggers,
+    scores: {
+      ownership_score:   parseFloat(ownership_score.toFixed(3)),
+      wage_ratio_norm:   parseFloat(wage_ratio_norm.toFixed(3)),
+      rd_norm:           parseFloat(rd_norm.toFixed(3)),
+      base_coop:         parseFloat(base_coop.toFixed(3)),
+    },
+    efu: {
+      hmi_per_worker:        parseFloat(hmi_per_worker.toFixed(3)),
+      net_efu_annual:        parseFloat(net_efu_annual.toFixed(0)),
+      R_future:              parseFloat(R_future.toFixed(3)),
+      interstitium_gain_pct: parseFloat(interstitium_gain_pct.toFixed(1)),
+    },
+    diagnostics: {
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
+
+// ===========================================================================
+// EFU 700.11 – Kollektív Trauma Gyógyítás és Igazságtétel
+// ===========================================================================
+
+export function classifyTRCZone(trc_index) {
+  if (trc_index >= 8) return { id: 'HEALING',        label: '⭐ Teljes Gyógyítás',        status: 'HEALING',        color: '#0369a1', action: 'Teljes gyógyítás kernel – R_future 0.9+, trauma transzmisszió < 10%, globális modell' };
+  if (trc_index >= 6) return { id: 'RECONCILIATION', label: '🟢 Kibékülés és Gyógyítás', status: 'RECONCILIATION', color: '#16a34a', action: 'Rwanda Gacaca szint – közösségi gyógyítás aktív, HMI +2.0 EFU/fő, R_future javul' };
+  if (trc_index >= 4) return { id: 'PROCESS',        label: '🟡 Folyamat Aktív',          status: 'PROCESS',        color: '#ca8a04', action: 'TRC folyamat aktív – tanúvallomások, dokumentálás, jóvátétel megkezdve' };
+  if (trc_index >= 2) return { id: 'ACKNOWLEDGMENT', label: '🟠 Elismerés Fázis',         status: 'ACKNOWLEDGMENT', color: '#ea580c', action: 'Formális elismerés – részleges igazságtétel, reparáció nem szisztematikus' };
+  return                     { id: 'SILENCE',        label: '🔴 Csend és Tagadás',        status: 'SILENCE',        color: '#dc2626', action: '500.1 aktív – trauma tagadás, generációs transzmisszió maximális, rendszer mérgezett' };
+}
+
+export function evaluateTRCTriggers(result, vars) {
+  const trauma_untreated = vars.trauma_transmission_untreated > 0.80 && vars.truth_process_depth < 0.20;
+  const no_reparation    = vars.reparation_coverage < 0.10 && vars.political_will < 0.30;
+  const trc_active       = result.trc_index >= 6.0;
+  const full_healing     = result.trc_index >= 8.0 && vars.reparation_coverage >= 0.60;
+
+  const active_triggers = [];
+  if (trauma_untreated) active_triggers.push('TRAUMA_UNTREATED');
+  if (no_reparation)    active_triggers.push('NO_REPARATION');
+  if (trc_active)       active_triggers.push('TRC_ACTIVE');
+  if (full_healing)     active_triggers.push('FULL_HEALING');
+
+  return { trauma_untreated, no_reparation, trc_active, full_healing, active_triggers };
+}
+
+export function calculateTRC(inputs = {}) {
+  const defaults = {
+    truth_process_depth:           0.65,
+    reparation_coverage:           0.50,
+    memorialization_quality:       0.55,
+    community_participation:       0.60,
+    political_will:                0.55,
+    trauma_transmission_untreated: 0.70,
+    population_affected_m:         60,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) { vars[k] = inputs[k]; } else { vars[k] = defaults[k]; missing.push(k); }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  const trauma_penalty    = vars.trauma_transmission_untreated * 0.40;
+  const truth_score       = vars.truth_process_depth * Math.pow(vars.political_will, 0.3);
+  const political_score   = (vars.political_will + vars.community_participation) / 2;
+  const base_trc          = clamp(truth_score * 0.30 + vars.reparation_coverage * 0.25 + vars.memorialization_quality * 0.20 + political_score * 0.25 - trauma_penalty * 0.30, 0, 1);
+  const trc_index         = base_trc * 10;
+
+  const hmi_per_capita      = clamp(base_trc * 2.0, 0, 2.5);
+  const net_efu_annual      = vars.population_affected_m * 1_000_000 * hmi_per_capita * 0.10 / 20;
+  const R_future            = 0.3 + base_trc * 0.6;
+  const interstitium_gain_pct = clamp(base_trc * 55, 0, 60);
+
+  const computed = { trc_index };
+  const zone     = classifyTRCZone(trc_index);
+  const triggers = evaluateTRCTriggers(computed, vars);
+
+  return {
+    trc_index: parseFloat(trc_index.toFixed(3)),
+    zone,
+    triggers,
+    scores: {
+      truth_score:     parseFloat(truth_score.toFixed(3)),
+      political_score: parseFloat(political_score.toFixed(3)),
+      trauma_penalty:  parseFloat(trauma_penalty.toFixed(3)),
+      base_trc:        parseFloat(base_trc.toFixed(3)),
+    },
+    efu: {
+      hmi_per_capita:        parseFloat(hmi_per_capita.toFixed(3)),
+      net_efu_annual:        parseFloat(net_efu_annual.toFixed(0)),
+      R_future:              parseFloat(R_future.toFixed(3)),
+      interstitium_gain_pct: parseFloat(interstitium_gain_pct.toFixed(1)),
+    },
+    diagnostics: {
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
+
+// ===========================================================================
+// EFU 700.12 – Biomimikry és Természettel Együttműködő Design
+// ===========================================================================
+
+export function classifyBMZone(bm_index) {
+  if (bm_index >= 8) return { id: 'BIOMIMETIC',        label: '⭐ Teljes Biomimetika',    status: 'BIOMIMETIC',        color: '#0369a1', action: 'Biomimetikus kernel – R_future 1.5+, cradle-to-cradle aktív, pedoszféra regenerálódik' };
+  if (bm_index >= 6) return { id: 'ACTIVE',            label: '🟢 Aktív Biomimikry',      status: 'ACTIVE',            color: '#16a34a', action: 'Eastgate szint – bio-inspirált rendszerek aktívak, HMI +2.2 EFU/épület, hulladék csökken' };
+  if (bm_index >= 4) return { id: 'EMERGING',          label: '🟡 Kibontakozó Design',    status: 'EMERGING',          color: '#ca8a04', action: 'Biomimetikus elemek integrálva – energia és anyag hatékonyság nő' };
+  if (bm_index >= 2) return { id: 'AWARE',             label: '🟠 Tudatos Kezdet',        status: 'AWARE',             color: '#ea580c', action: 'Biomimikry tudatosság – részleges alkalmazás, lock-in még domináns' };
+  return                    { id: 'LINEAR_INDUSTRIAL', label: '🔴 Lineáris Ipari',        status: 'LINEAR_INDUSTRIAL', color: '#dc2626', action: '600.4 aktív – természet elleni design, ökológiai kanibalizmus maximális' };
+}
+
+export function evaluateBMTriggers(result, vars) {
+  const linear_lock_in     = vars.industrial_linear_lock_in > 0.70 && vars.bio_strategy_adoption < 0.20;
+  const low_efficiency     = vars.material_efficiency < 0.30 && vars.energy_reduction < 0.30;
+  const biomimicry_active  = result.bm_index >= 6.0;
+  const full_biomimetic    = result.bm_index >= 8.0 && vars.waste_elimination >= 0.80;
+
+  const active_triggers = [];
+  if (linear_lock_in)    active_triggers.push('LINEAR_LOCK_IN');
+  if (low_efficiency)    active_triggers.push('LOW_EFFICIENCY');
+  if (biomimicry_active) active_triggers.push('BIOMIMICRY_ACTIVE');
+  if (full_biomimetic)   active_triggers.push('FULL_BIOMIMETIC');
+
+  return { linear_lock_in, low_efficiency, biomimicry_active, full_biomimetic, active_triggers };
+}
+
+export function calculateBM(inputs = {}) {
+  const defaults = {
+    material_efficiency:         0.75,
+    energy_reduction:            0.60,
+    waste_elimination:           0.70,
+    toxicity_reduction:          0.80,
+    bio_strategy_adoption:       0.45,
+    industrial_linear_lock_in:   0.55,
+    buildings_count:             1,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) { vars[k] = inputs[k]; } else { vars[k] = defaults[k]; missing.push(k); }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  const lock_in_penalty  = vars.industrial_linear_lock_in * 0.35;
+  const bio_compat       = (vars.toxicity_reduction + vars.bio_strategy_adoption) / 2;
+  const r_future_factor  = clamp(vars.bio_strategy_adoption + vars.waste_elimination * 0.5, 0, 1);
+  const base_bm          = clamp(vars.material_efficiency * 0.25 + vars.energy_reduction * 0.25 + vars.waste_elimination * 0.20 + bio_compat * 0.15 + r_future_factor * 0.15 - lock_in_penalty * 0.20, 0, 1);
+  const bm_index         = base_bm * 10;
+
+  const hmi_per_building    = clamp(base_bm * 2.2, 0, 2.5);
+  const net_efu_annual      = vars.buildings_count * hmi_per_building * 35000 / 25;
+  const R_future            = 1.0 + base_bm * 0.5;
+  const interstitium_gain_pct = clamp(base_bm * 20, 0, 25);
+
+  const computed = { bm_index };
+  const zone     = classifyBMZone(bm_index);
+  const triggers = evaluateBMTriggers(computed, vars);
+
+  return {
+    bm_index: parseFloat(bm_index.toFixed(3)),
+    zone,
+    triggers,
+    scores: {
+      bio_compat:       parseFloat(bio_compat.toFixed(3)),
+      r_future_factor:  parseFloat(r_future_factor.toFixed(3)),
+      lock_in_penalty:  parseFloat(lock_in_penalty.toFixed(3)),
+      base_bm:          parseFloat(base_bm.toFixed(3)),
+    },
+    efu: {
+      hmi_per_building:      parseFloat(hmi_per_building.toFixed(3)),
+      net_efu_annual:        parseFloat(net_efu_annual.toFixed(0)),
+      R_future:              parseFloat(R_future.toFixed(3)),
+      interstitium_gain_pct: parseFloat(interstitium_gain_pct.toFixed(1)),
+    },
+    diagnostics: {
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}

@@ -30,6 +30,11 @@ import Energia700Panel from './Energia700Panel.jsx';
 import RegenMeres700Panel from './RegenMeres700Panel.jsx';
 import AgroEnergia700Panel from './AgroEnergia700Panel.jsx';
 import ParticipatiBudget700Panel from './ParticipatiBudget700Panel.jsx';
+import UBS700Panel from './UBS700Panel.jsx';
+import CommunityValuta700Panel from './CommunityValuta700Panel.jsx';
+import WorkerCoop700Panel from './WorkerCoop700Panel.jsx';
+import CollectiveTrauma700Panel from './CollectiveTrauma700Panel.jsx';
+import Biomimicry700Panel from './Biomimicry700Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -606,6 +611,21 @@ export default function Calculator() {
 
       {/* EFU 700.5 — Participatív Költségvetés / dFOS v1.2 */}
       <ParticipatiBudget700Panel />
+
+      {/* EFU 700.8 — Univerzális Alapszolgáltatások (UBS) */}
+      <UBS700Panel />
+
+      {/* EFU 700.9 — Közösségi Valuták és Időbanka */}
+      <CommunityValuta700Panel />
+
+      {/* EFU 700.10 — Munkás Önigazgatás és Kooperatív Vállalatok */}
+      <WorkerCoop700Panel />
+
+      {/* EFU 700.11 — Kollektív Trauma Gyógyítás és Igazságtétel */}
+      <CollectiveTrauma700Panel />
+
+      {/* EFU 700.12 — Biomimikry és Természettel Együttműködő Design */}
+      <Biomimicry700Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>
