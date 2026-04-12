@@ -7,6 +7,35 @@ import {
   classifyMROI,
   FLR_PARASITISM_THRESHOLD,
 } from '../logic/efu-engine.js';
+import CewsPanel from './CewsPanel.jsx';
+import MR600Panel from './MR600Panel.jsx';
+import MSBE600Panel from './MSBE600Panel.jsx';
+import PFAS600Panel from './PFAS600Panel.jsx';
+import Happiness600Panel from './Happiness600Panel.jsx';
+import Synergy600Panel from './Synergy600Panel.jsx';
+import Atrocitas600Panel from './Atrocitas600Panel.jsx';
+import Narrativa600Panel from './Narrativa600Panel.jsx';
+import AMDPI600Panel from './AMDPI600Panel.jsx';
+import HobbyAnimal600Panel from './HobbyAnimal600Panel.jsx';
+import MVP600Panel from './MVP600Panel.jsx';
+import Entertainment600Panel from './Entertainment600Panel.jsx';
+import ReligiousFlux600Panel from './ReligiousFlux600Panel.jsx';
+import CdsPanel from './CdsPanel.jsx';
+import GreshamParasite600Panel from './GreshamParasite600Panel.jsx';
+import DigitalExtraction600Panel from './DigitalExtraction600Panel.jsx';
+import NooMetrics600Panel from './NooMetrics600Panel.jsx';
+import UPFMetabolism600Panel from './UPFMetabolism600Panel.jsx';
+import MEII800Panel from './MEII800Panel.jsx';
+import Energia700Panel from './Energia700Panel.jsx';
+import RegenMeres700Panel from './RegenMeres700Panel.jsx';
+import AgroEnergia700Panel from './AgroEnergia700Panel.jsx';
+import ParticipatiBudget700Panel from './ParticipatiBudget700Panel.jsx';
+import UBS700Panel from './UBS700Panel.jsx';
+import CommunityValuta700Panel from './CommunityValuta700Panel.jsx';
+import WorkerCoop700Panel from './WorkerCoop700Panel.jsx';
+import CollectiveTrauma700Panel from './CollectiveTrauma700Panel.jsx';
+import Biomimicry700Panel from './Biomimicry700Panel.jsx';
+import ReligiousRegen700Panel from './ReligiousRegen700Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -516,6 +545,91 @@ export default function Calculator() {
           </div>
         ))}
       </div>
+
+      {/* CEWS — Civilization Early Warning System */}
+      <CewsPanel />
+
+      {/* EFU 600.00 — Metabolikus Ragadozó v2.1 */}
+      <MR600Panel />
+
+      {/* EFU 600.2 — Molekuláris Rendszerhatár-Események (MSBE) */}
+      <MSBE600Panel />
+
+      {/* EFU 600.52 — PFAS & Forever Chemicals */}
+      <PFAS600Panel />
+      <Happiness600Panel />
+
+      {/* EFU 600.0 — 600-as Szinergia-Mátrix (Antiflux Szinergia Alapoperátor) */}
+      <Synergy600Panel />
+
+      {/* EFU 600.56 — Atrocitás Potenciál (A-érték) Modell v1.2 */}
+      <Atrocitas600Panel />
+
+      {/* EFU 600.40–42 — Narratíva Degradáció Modell v1.0 */}
+      <Narrativa600Panel />
+
+      {/* EFU 600.52.3 — AM-DPI Index (PFAS Audit Integration) v1.1 */}
+      <AMDPI600Panel />
+
+      {/* EFU 600.30 — Hobby Animal Keeping & Wildlife Extraction Parasitism v1.0 */}
+      <HobbyAnimal600Panel />
+
+      {/* EFU 600.10 — Monitoring és Verifikáció (MVP) v1.0 */}
+      <MVP600Panel />
+
+      {/* EFU 600.20 — Szórakoztatóipar Dopamin Extrakció v1.0 */}
+      <Entertainment600Panel />
+
+      {/* EFU 600.82 — Vallási Identitás Antiflux v1.0 */}
+      <ReligiousFlux600Panel />
+
+      {/* EFU 900.1 CDS / 900.2 CDP — Integrációs Panel (Sprint 2) */}
+      <CdsPanel />
+
+      {/* EFU 600.69 — Gresham–Parazita Spirál v1.0 */}
+      <GreshamParasite600Panel />
+
+      {/* EFU 600.53 — Digitális Extrakció & AI Parazitizmus v0.3 */}
+      <DigitalExtraction600Panel />
+
+      {/* EFU 600.51 — Noosphere Antifluxus Metrikák v1.0 */}
+      <NooMetrics600Panel />
+
+      {/* EFU 600.58 — UPF Anyagcsere Parazitizmus v0.2 */}
+      <UPFMetabolism600Panel />
+
+      {/* EFU 800.13 — MEII Metabolikus Érték-Intenzitás Index v1.1 */}
+      <MEII800Panel />
+
+      {/* EFU 700.2 — Közösségi Energia Szövetkezet v1.0 */}
+      <Energia700Panel />
+
+      {/* EFU 700.1.1 — Regeneratív Mérési Protokoll v1.0 */}
+      <RegenMeres700Panel />
+
+      {/* EFU 700.1.1.2 — Agro-Energia Szimbiózis v1.0 */}
+      <AgroEnergia700Panel />
+
+      {/* EFU 700.5 — Participatív Költségvetés / dFOS v1.2 */}
+      <ParticipatiBudget700Panel />
+
+      {/* EFU 700.8 — Univerzális Alapszolgáltatások (UBS) */}
+      <UBS700Panel />
+
+      {/* EFU 700.9 — Közösségi Valuták és Időbanka */}
+      <CommunityValuta700Panel />
+
+      {/* EFU 700.10 — Munkás Önigazgatás és Kooperatív Vállalatok */}
+      <WorkerCoop700Panel />
+
+      {/* EFU 700.11 — Kollektív Trauma Gyógyítás és Igazságtétel */}
+      <CollectiveTrauma700Panel />
+
+      {/* EFU 700.12 — Biomimikry és Természettel Együttműködő Design */}
+      <Biomimicry700Panel />
+
+      {/* EFU 700.14 — Vallási Regeneratív Fluxus Protokoll v1.1 */}
+      <ReligiousRegen700Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>
