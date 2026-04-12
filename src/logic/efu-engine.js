@@ -3130,6 +3130,9 @@ export function calculateCOOP(inputs = {}) {
     wage_ratio_ceo_worker:   6,
     rd_investment_pct:       0.045,
     workers_k:               81,
+    decision_cycle_length:   0.30,
+    local_knowledge_retention: 0.70,
+    turnover_s_factor:       0.25,
   };
 
   const missing = [];
@@ -3143,8 +3146,13 @@ export function calculateCOOP(inputs = {}) {
   const wage_ratio_norm  = clamp(1 - (vars.wage_ratio_ceo_worker - 1) / 299, 0, 1);
   const rd_norm          = clamp(vars.rd_investment_pct / 0.10, 0, 1);
   const ownership_score  = vars.worker_ownership_pct * (1 + rd_norm * 0.2);
-  const base_coop_raw    = clamp(ownership_score * 0.30 + vars.profit_sharing_ratio * 0.25 + vars.workplace_democracy * 0.25 + vars.job_security * 0.20, 0, 1);
-  const base_coop        = base_coop_raw * Math.pow(wage_ratio_norm, 0.3);
+
+  // S-factor influence
+  const local_knowledge_factor = vars.local_knowledge_retention * (1 - vars.decision_cycle_length * 0.5);
+  const s_factor_penalty       = vars.turnover_s_factor * 0.20;
+
+  const base_coop_raw    = clamp(ownership_score * 0.30 + vars.profit_sharing_ratio * 0.25 + vars.workplace_democracy * 0.25 + vars.job_security * 0.20 + local_knowledge_factor * 0.10, 0, 1);
+  const base_coop        = clamp(base_coop_raw * Math.pow(wage_ratio_norm, 0.3) - s_factor_penalty, 0, 1);
   const coop_index       = base_coop * 10;
 
   const hmi_per_worker      = clamp(base_coop * 3.8, 0, 4.5);
@@ -3161,10 +3169,12 @@ export function calculateCOOP(inputs = {}) {
     zone,
     triggers,
     scores: {
-      ownership_score:   parseFloat(ownership_score.toFixed(3)),
-      wage_ratio_norm:   parseFloat(wage_ratio_norm.toFixed(3)),
-      rd_norm:           parseFloat(rd_norm.toFixed(3)),
-      base_coop:         parseFloat(base_coop.toFixed(3)),
+      ownership_score:        parseFloat(ownership_score.toFixed(3)),
+      wage_ratio_norm:        parseFloat(wage_ratio_norm.toFixed(3)),
+      rd_norm:                parseFloat(rd_norm.toFixed(3)),
+      base_coop:              parseFloat(base_coop.toFixed(3)),
+      local_knowledge_factor: parseFloat(local_knowledge_factor.toFixed(3)),
+      s_factor_penalty:       parseFloat(s_factor_penalty.toFixed(3)),
     },
     efu: {
       hmi_per_worker:        parseFloat(hmi_per_worker.toFixed(3)),
@@ -3172,6 +3182,7 @@ export function calculateCOOP(inputs = {}) {
       R_future:              parseFloat(R_future.toFixed(3)),
       interstitium_gain_pct: parseFloat(interstitium_gain_pct.toFixed(1)),
     },
+    tri_hmi_range: { min: 0.6, max: 0.9, label: 'STABLE–SYMBIOTIC' },
     diagnostics: {
       missing_inputs: missing,
       confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
@@ -3216,6 +3227,9 @@ export function calculateTRC(inputs = {}) {
     political_will:                0.55,
     trauma_transmission_untreated: 0.70,
     population_affected_m:         60,
+    p_agency:                      0.55,
+    c_trust:                       0.50,
+    t_load:                        4.5,
   };
 
   const missing = [];
@@ -3225,6 +3239,10 @@ export function calculateTRC(inputs = {}) {
   }
 
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  // TRI formula
+  const tri = (vars.p_agency * vars.c_trust) / (vars.t_load + 1);
+  const tri_zone = tri < 0.3 ? 'CRITICAL' : tri < 0.7 ? 'TRANSITIONAL' : 'REGENERATIVE';
 
   const trauma_penalty    = vars.trauma_transmission_untreated * 0.40;
   const truth_score       = vars.truth_process_depth * Math.pow(vars.political_will, 0.3);
@@ -3243,6 +3261,8 @@ export function calculateTRC(inputs = {}) {
 
   return {
     trc_index: parseFloat(trc_index.toFixed(3)),
+    tri: parseFloat(tri.toFixed(3)),
+    tri_zone,
     zone,
     triggers,
     scores: {
@@ -3342,6 +3362,129 @@ export function calculateBM(inputs = {}) {
       R_future:              parseFloat(R_future.toFixed(3)),
       interstitium_gain_pct: parseFloat(interstitium_gain_pct.toFixed(1)),
     },
+    diagnostics: {
+      missing_inputs: missing,
+      confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),
+    },
+    variables: { raw: vars },
+  };
+}
+
+// ===========================================================================
+// EFU 700.14 – Vallási Rendszerek Regeneratív Fluxus Protokollja
+// ===========================================================================
+
+export function classifyReligiousRegenZone(cews_score_0_10) {
+  if (cews_score_0_10 >= 8) return { id: 'REGENERATIVE_ACTIVE', label: '⭐ T₇₀₀.₁₄ Regeneratív Aktív', status: 'REGENERATIVE_ACTIVE', color: '#0369a1', action: 'T₇₀₀.₁₄ aktív – CEWS>0.7 + RCR<0.3, fluxus-erősítő, stack +8-12%' };
+  if (cews_score_0_10 >= 6) return { id: 'REGEN_EMERGING', label: '🟢 Regeneratív Induló', status: 'REGEN_EMERGING', color: '#16a34a', action: 'Regeneratív induló – CEWS>0.6, RCR csökkentés folyamatban' };
+  if (cews_score_0_10 >= 4) return { id: 'TRANSITIONAL', label: '🟡 Átmeneti', status: 'TRANSITIONAL', color: '#ca8a04', action: 'Átmeneti – kognitív és identitás nyitás indul, CEWS fejlesztés szükséges' };
+  if (cews_score_0_10 >= 2) return { id: 'ANTIFLUX', label: '�� Antiflux Domináns', status: 'ANTIFLUX', color: '#ea580c', action: 'Antiflux domináns – részleges nyitás, de zárlatok fennmaradnak' };
+  return { id: 'PARASITIC_EXTRACTION', label: '🔴 Parazita Extrakció', status: 'PARASITIC_EXTRACTION', color: '#dc2626', action: '600.22/600.82 aktív – spiritual MLM, tized/adomány extrakció, csoporthatár-zár' };
+}
+
+export function evaluateReligiousRegenTriggers(result, vars) {
+  const antiflux_active = vars.rcr > 0.5 && vars.m4_cognitive < 0.30;
+  const spiritual_mlm   = vars.rcr > 0.50 && vars.m1_energy < 0.30;
+  const regen_threshold = result.cews_score >= 0.7;
+  const full_regen      = result.cews_score >= 0.7 && vars.rcr < 0.3 && vars.iqf >= 0.6;
+
+  const active_triggers = [];
+  if (antiflux_active) active_triggers.push('ANTIFLUX_ACTIVE');
+  if (spiritual_mlm)   active_triggers.push('SPIRITUAL_MLM');
+  if (regen_threshold) active_triggers.push('REGEN_THRESHOLD');
+  if (full_regen)      active_triggers.push('FULL_REGEN');
+
+  return { antiflux_active, spiritual_mlm, regen_threshold, full_regen, active_triggers };
+}
+
+export function calculateReligiousRegen(inputs = {}) {
+  const defaults = {
+    m3_identity:       0.55,
+    m4_cognitive:      0.60,
+    m8_time:           0.55,
+    m2_material:       0.60,
+    m1_energy:         0.65,
+    rcr:               0.20,
+    mroi_gap:          0.15,
+    iqf:               0.65,
+    p_intent:          0.65,
+    community_scale_k: 50,
+  };
+
+  const missing = [];
+  const vars = {};
+  for (const k of Object.keys(defaults)) {
+    if (inputs[k] !== undefined) { vars[k] = inputs[k]; } else { vars[k] = defaults[k]; missing.push(k); }
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  // CEWS composite score (weighted sum of 5 axes)
+  const cews_raw = vars.m3_identity * 0.20 + vars.m4_cognitive * 0.20 + vars.m8_time * 0.15 + vars.m2_material * 0.25 + vars.m1_energy * 0.20;
+
+  // Penalties from audit variables
+  const rcr_penalty    = vars.rcr * 0.15;
+  const mroi_penalty   = vars.mroi_gap * 0.10;
+
+  // Bonuses
+  const iqf_bonus      = (vars.iqf - 0.5) * 0.10;
+  const intent_bonus   = (vars.p_intent - 0.5) * 0.05;
+
+  const cews_score      = clamp(cews_raw - rcr_penalty - mroi_penalty + iqf_bonus + intent_bonus, 0, 1);
+  const cews_score_0_10 = cews_score * 10;
+
+  // T₇₀₀.₁₄ transformation active if all conditions met
+  const t700_14_active = cews_score >= 0.7 && vars.rcr < 0.3 && vars.mroi_gap < 0.2 && vars.iqf >= 0.6;
+
+  // EFU / HMI
+  const hmi_per_capita         = clamp(cews_score * 1.5, 0, 1.8);
+  const stack_efficiency_bonus = t700_14_active ? clamp(cews_score * 0.12, 0, 0.12) : 0;
+  const net_efu_annual         = vars.community_scale_k * 1000 * hmi_per_capita * 0.10;
+  const R_future               = 1.0 + cews_score * 0.2;
+  const interstitium_gain_pct  = clamp(cews_score * 35, 0, 40);
+
+  // Reference model comparison
+  const reference_models = [
+    { name: 'Buddhista', efu_reduction: '40%', eta_w: 1.8, mroi: 1.6, rcr: 0.10, cews: 0.85, status: '✓ REGEN' },
+    { name: 'Ferenc-rendi', efu_reduction: '30%', eta_w: 2.1, mroi: 2.3, rcr: 0.15, cews: 0.92, status: '✓ REGEN' },
+    { name: 'Zarándokút', efu_reduction: '15%', eta_w: 1.4, mroi: 1.3, rcr: 0.25, cews: 0.78, status: '✓ REGEN' },
+  ];
+
+  const computed = { cews_score };
+  const zone     = classifyReligiousRegenZone(cews_score_0_10);
+  const triggers = evaluateReligiousRegenTriggers(computed, vars);
+
+  return {
+    cews_score:      parseFloat(cews_score.toFixed(3)),
+    cews_score_0_10: parseFloat(cews_score_0_10.toFixed(2)),
+    t700_14_active,
+    zone,
+    triggers,
+    cews_axes: {
+      m3_identity:  vars.m3_identity,
+      m4_cognitive: vars.m4_cognitive,
+      m8_time:      vars.m8_time,
+      m2_material:  vars.m2_material,
+      m1_energy:    vars.m1_energy,
+    },
+    audit: {
+      rcr:       vars.rcr,
+      mroi_gap:  vars.mroi_gap,
+      iqf:       vars.iqf,
+      p_intent:  vars.p_intent,
+      rcr_pass:  vars.rcr < 0.3,
+      mroi_pass: vars.mroi_gap < 0.2,
+      iqf_pass:  vars.iqf >= 0.6,
+      cews_pass: cews_score >= 0.7,
+    },
+    efu: {
+      hmi_per_capita:         parseFloat(hmi_per_capita.toFixed(3)),
+      net_efu_annual:         parseFloat(net_efu_annual.toFixed(0)),
+      R_future:               parseFloat(R_future.toFixed(3)),
+      interstitium_gain_pct:  parseFloat(interstitium_gain_pct.toFixed(1)),
+      stack_efficiency_bonus: parseFloat((stack_efficiency_bonus * 100).toFixed(1)),
+    },
+    reference_models,
     diagnostics: {
       missing_inputs: missing,
       confidence: parseFloat((1 - missing.length / Object.keys(defaults).length).toFixed(2)),

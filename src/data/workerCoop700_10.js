@@ -11,18 +11,19 @@
 
 export const MODULE_META_700_10 = {
   id: '700.10',
-  version: '1.0',
+  version: '1.1',
   title: 'Munkás Önigazgatás és Kooperatív Vállalatok',
   titleEn: 'Worker Self-Management & Cooperative Enterprises',
-  subtitle: 'Munkástulajdon · Profit megosztás · Demokratikus döntéshozatal',
+  subtitle: 'Munkástulajdon · Profit megosztás · Demokratikus döntéshozatal | 700.10 = JIM-30 társadalmi analóg | Szervezet helyileg irányítható?',
   series: '700 – Regeneratív Beavatkozások',
   tier: 1,
   status: 'FC-APPROVED ✓',
   date: '2026-04-12',
   net_efu_ref: '+340 000 EFU-E/év (81k × +4.2 átlag, Mondragon referencia)',
   formula: 'COOP = worker_ownership×0.30 + profit_sharing×0.25 + workplace_democracy×0.25 + job_security×0.20',
-  antithesis: '600.5 Munkaerő metabolikus deficit',
-  connections: ['700.5', '700.8', '700.9', '600.5', '118.2'],
+  antithesis: '600.5 Munkaerő metabolikus deficit | 600.69 Gresham-spirál',
+  connections: ['700.5', '700.8', '700.9', '600.5', '118.2', '600.69', '905.0', 'JIM-30'],
+  hmi_range: { min: 0.6, max: 0.9, label: 'STABLE–SYMBIOTIC' },
 };
 
 export const COOP_VARIABLES_MAIN = [
@@ -35,6 +36,12 @@ export const COOP_VARIABLES_MAIN = [
 
 export const COOP_VARIABLES_NEGATIVE = [
   { id: 'wage_ratio_ceo_worker', label: 'CEO/worker bérarány', description: 'Legmagasabb és legalacsonyabb bér aránya (Mondragon: 6, S&P500 CEO: 300+)', default: 6, min: 1, max: 300, step: 1, color: '#dc2626', positive: false, layer: 'negative', unit: ':1' },
+  { id: 'decision_cycle_length', label: 'Döntési ciklus hossza', description: '0=azonnali helyi döntés, 1=lassú centralizált', default: 0.30, min: 0, max: 1, step: 0.01, color: '#b91c1c', positive: false, layer: 'negative', unit: '' },
+  { id: 'turnover_s_factor', label: 'Fluktuáció mint S-factor komponens', description: '0=alacsony fluktuáció, 1=magas', default: 0.25, min: 0, max: 1, step: 0.01, color: '#dc2626', positive: false, layer: 'negative', unit: '' },
+];
+
+export const COOP_VARIABLES_SFACTOR = [
+  { id: 'local_knowledge_retention', label: 'Helyi tudásmegőrzés aránya', description: 'Helyi tudásmegőrzés: 0=elvész, 1=teljes megőrzés', default: 0.70, min: 0, max: 1, step: 0.01, color: '#15803d', positive: true, layer: 'sfactor', unit: '' },
 ];
 
 export const COOP_VARIABLES_CONTEXT = [
@@ -44,6 +51,7 @@ export const COOP_VARIABLES_CONTEXT = [
 export const COOP_ALL_VARIABLES = [
   ...COOP_VARIABLES_MAIN,
   ...COOP_VARIABLES_NEGATIVE,
+  ...COOP_VARIABLES_SFACTOR,
   ...COOP_VARIABLES_CONTEXT,
 ];
 

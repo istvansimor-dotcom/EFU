@@ -35,6 +35,7 @@ import CommunityValuta700Panel from './CommunityValuta700Panel.jsx';
 import WorkerCoop700Panel from './WorkerCoop700Panel.jsx';
 import CollectiveTrauma700Panel from './CollectiveTrauma700Panel.jsx';
 import Biomimicry700Panel from './Biomimicry700Panel.jsx';
+import ReligiousRegen700Panel from './ReligiousRegen700Panel.jsx';
 
 const inputStyle = {
   width: '100%',
@@ -626,6 +627,9 @@ export default function Calculator() {
 
       {/* EFU 700.12 — Biomimikry és Természettel Együttműködő Design */}
       <Biomimicry700Panel />
+
+      {/* EFU 700.14 — Vallási Regeneratív Fluxus Protokoll v1.1 */}
+      <ReligiousRegen700Panel />
 
       {/* Footer */}
       <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0, lineHeight: '1.6' }}>

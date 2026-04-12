@@ -18,6 +18,7 @@ import {
   MODULE_META_700_10,
   COOP_VARIABLES_MAIN,
   COOP_VARIABLES_NEGATIVE,
+  COOP_VARIABLES_SFACTOR,
   COOP_VARIABLES_CONTEXT,
   COOP_ZONES,
   COOP_TRIGGERS,
@@ -124,6 +125,7 @@ const PILOT_CASES = [
   { city: 'Emilia-Romagna 🇮🇹', period: '1970–', size: 'GDP 45% coop szektor', result: 'Legversenyképesebb EU régió – coop klaszterek, Bologna blueprint' },
   { city: 'Evergreen 🇺🇸', period: '2008–', size: '5 kooperatív vállalat', result: 'Cleveland modell – bezárt gyárak helyén munkástulajdonú vállalatok' },
   { city: 'Co-operative Group 🇬🇧', period: '1844–', size: '4.6M tag, £10Mrd forgalom', result: 'Világ legrégebbi szövetkezet – Rochdale Pioneers örökség' },
+  { city: 'Jugoszláv önigazgatás 🇾🇺 (1950–90)', period: '1950–1990', size: 'Nemzeti szintű rendszer', result: 'Nemzeti szintű rendszerszintű kísérlet – skálázás és makrokoord. tanulságok' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -140,6 +142,7 @@ export default function WorkerCoop700Panel() {
   const [vals, setVals] = useState({
     ...buildDefaults(COOP_VARIABLES_MAIN),
     ...buildDefaults(COOP_VARIABLES_NEGATIVE),
+    ...buildDefaults(COOP_VARIABLES_SFACTOR),
     ...buildDefaults(COOP_VARIABLES_CONTEXT),
   });
 
@@ -167,11 +170,12 @@ export default function WorkerCoop700Panel() {
               EFU {MODULE_META_700_10.id} · {MODULE_META_700_10.series} · v{MODULE_META_700_10.version}
             </div>
             <h2 style={{ margin: '0 0 4px', fontSize: '20px', fontWeight: '800' }}>{MODULE_META_700_10.title}</h2>
-            <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '8px' }}>{MODULE_META_700_10.subtitle}</div>
+            <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '8px' }}>JIM-30 társadalmi analóg: Szervezet helyileg irányítható? · {MODULE_META_700_10.subtitle.split('|')[0].trim()}</div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <Badge color="rgba(255,255,255,0.25)" size="10px">{MODULE_META_700_10.status}</Badge>
               <Badge color="rgba(220,38,38,0.8)" size="10px">⚔ Ellentét: {MODULE_META_700_10.antithesis}</Badge>
               <Badge color="rgba(255,255,255,0.2)" size="10px">COOP Kernel</Badge>
+              <Badge color="rgba(255,255,255,0.2)" size="10px">HMI: 0.6–0.9 STABIL–SZIMBIOTIKUS</Badge>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -198,8 +202,12 @@ export default function WorkerCoop700Panel() {
             ))}
           </div>
           <div>
-            <LayerHeader label="Negatív Tényező (bérarány)" icon="⚠️" color="#dc2626" />
+            <LayerHeader label="Negatív Tényezők (bérarány + S-factor)" icon="⚠️" color="#dc2626" />
             {COOP_VARIABLES_NEGATIVE.map(v => (
+              <VarSlider key={v.id} variable={v} value={vals[v.id]} onChange={handleChange} />
+            ))}
+            <LayerHeader label="S-factor: Helyi tudás" icon="🧠" color="#15803d" />
+            {COOP_VARIABLES_SFACTOR.map(v => (
               <VarSlider key={v.id} variable={v} value={vals[v.id]} onChange={handleChange} />
             ))}
             <LayerHeader label="Kontextus (munkások)" icon="👷" color="#374151" />
@@ -207,6 +215,39 @@ export default function WorkerCoop700Panel() {
               <VarSlider key={v.id} variable={v} value={vals[v.id]} onChange={handleChange} />
             ))}
           </div>
+        </div>
+      </SectionBox>
+
+      {/* ── JIM-30 Analóg Info Box ── */}
+      <SectionBox title="JIM-30 Társadalmi Analóg" icon="🔧" accentColor="#fde68a">
+        <div style={{ marginBottom: '10px', fontSize: '11px', color: '#374151' }}>
+          Ahogy a <strong>JIM-30</strong> méri, hogy egy eszköz helyileg javítható-e, a <strong>700.10</strong> méri, hogy egy szervezet helyileg irányítható-e. Alacsony S-factor = belső autonómia; Magas S-factor = külső függőség.
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+          <thead>
+            <tr style={{ background: '#fef3c7' }}>
+              <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: '700', color: '#b45309' }}>600.5 Centralizált</th>
+              <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: '700', color: '#16a34a' }}>700.10 Önigazgatás</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ['Döntés távolról', 'Döntés ott ahol a tudás van'],
+              ['Magas S-factor', 'Alacsony S-factor'],
+              ['Tervezett elavulás', 'JIM-30 folyamat-karbantartás'],
+            ].map(([l, r], i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #fde68a' }}>
+                <td style={{ padding: '6px 10px', color: '#dc2626' }}>{l}</td>
+                <td style={{ padding: '6px 10px', color: '#16a34a' }}>{r}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ marginTop: '10px', padding: '8px 12px', background: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0', fontSize: '11px', color: '#166534' }}>
+          <strong>600.69 Gresham-spirál:</strong> Az extraktív forma kiszorítja az önigazgatott formát – aktív védekezés szükséges a Gresham-spirál ellen.
+        </div>
+        <div style={{ marginTop: '8px', padding: '6px 12px', background: '#fffbeb', borderRadius: '6px', border: '1px solid #fde68a', fontSize: '11px', color: '#b45309' }}>
+          <strong>HMI tartomány: 0.6–0.9 (STABIL–SZIMBIOTIKUS)</strong> – operációs zóna az önigazgatott szervezetek számára
         </div>
       </SectionBox>
 

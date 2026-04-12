@@ -11,18 +11,18 @@
 
 export const MODULE_META_700_11 = {
   id: '700.11',
-  version: '1.0',
+  version: '1.1',
   title: 'Kollektív Trauma Gyógyítás és Igazságtétel',
   titleEn: 'Collective Trauma Healing & Transitional Justice',
-  subtitle: 'Igazságtételi folyamat · Jóvátétel · Emlékezés · Politikai akarat',
+  subtitle: 'TRI Formula | 3-rétegű gyógyítási modell | Fire Chief kiterjesztett szerep',
   series: '700 – Regeneratív Beavatkozások',
   tier: 1,
   status: 'FC-APPROVED ✓',
   date: '2026-04-12',
   net_efu_ref: '+120M EFU-E (20 év, 60M fő × +0.1 évente)',
-  formula: 'TRC = truth_process×0.30 + reparation×0.25 + memorialization×0.20 + political_stability×0.25',
+  formula: 'TRI = (P_agency × C_trust) / (T_load + 1) | TRC = truth_process×0.30 + reparation×0.25 + memorialization×0.20 + political_stability×0.25',
   antithesis: '500.1 Kollektív trauma',
-  connections: ['500.1', '501.0', '502.0', '700.5', '300.0'],
+  connections: ['500.1', '501.0', '502.0', '700.5', '300.0', '905.0', '900.6.1', 'EZ-SEV2', 'JIM-30'],
 };
 
 export const TRC_VARIABLES_MAIN = [
@@ -35,6 +35,12 @@ export const TRC_VARIABLES_MAIN = [
 
 export const TRC_VARIABLES_NEGATIVE = [
   { id: 'trauma_transmission_untreated', label: 'Kezeletlen trauma transzmisszió', description: 'Generációkon átívelő kezeletlen trauma terjedési rátája (0-1)', default: 0.70, min: 0, max: 1, step: 0.01, color: '#dc2626', positive: false, layer: 'negative', unit: '' },
+  { id: 't_load', label: 'Traumaterhelés (T_load, 0-10)', description: 'Mérhető traumaterhelés fluktuáció és konfliktusmérés alapján', default: 4.5, min: 0, max: 10, step: 0.1, color: '#dc2626', positive: false, layer: 'negative', unit: '' },
+];
+
+export const TRC_VARIABLES_TRI = [
+  { id: 'p_agency', label: 'Közösség cselekvőképessége (P_agency)', description: 'Közösség önirányítási képessége (0-1), TRI számításhoz', default: 0.55, min: 0, max: 1, step: 0.01, color: '#7c3aed', positive: true, layer: 'tri', unit: '' },
+  { id: 'c_trust', label: 'Horizontális bizalmi index (C_trust)', description: 'Közösségen belüli horizontális bizalom szintje (0-1)', default: 0.50, min: 0, max: 1, step: 0.01, color: '#6d28d9', positive: true, layer: 'tri', unit: '' },
 ];
 
 export const TRC_VARIABLES_CONTEXT = [
@@ -44,6 +50,7 @@ export const TRC_VARIABLES_CONTEXT = [
 export const TRC_ALL_VARIABLES = [
   ...TRC_VARIABLES_MAIN,
   ...TRC_VARIABLES_NEGATIVE,
+  ...TRC_VARIABLES_TRI,
   ...TRC_VARIABLES_CONTEXT,
 ];
 

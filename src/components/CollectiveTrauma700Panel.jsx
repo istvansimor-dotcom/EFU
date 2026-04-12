@@ -18,6 +18,7 @@ import {
   MODULE_META_700_11,
   TRC_VARIABLES_MAIN,
   TRC_VARIABLES_NEGATIVE,
+  TRC_VARIABLES_TRI,
   TRC_VARIABLES_CONTEXT,
   TRC_ZONES,
   TRC_TRIGGERS,
@@ -138,13 +139,14 @@ export default function CollectiveTrauma700Panel() {
   const [vals, setVals] = useState({
     ...buildDefaults(TRC_VARIABLES_MAIN),
     ...buildDefaults(TRC_VARIABLES_NEGATIVE),
+    ...buildDefaults(TRC_VARIABLES_TRI),
     ...buildDefaults(TRC_VARIABLES_CONTEXT),
   });
 
   const handleChange = (id, value) => setVals(prev => ({ ...prev, [id]: value }));
 
   const result = useMemo(() => calculateTRC(vals), [vals]);
-  const { trc_index, zone, triggers, scores, efu } = result;
+  const { trc_index, tri, tri_zone, zone, triggers, scores, efu } = result;
 
   const [showJson, setShowJson] = useState(false);
 
@@ -164,7 +166,7 @@ export default function CollectiveTrauma700Panel() {
               EFU {MODULE_META_700_11.id} · {MODULE_META_700_11.series} · v{MODULE_META_700_11.version}
             </div>
             <h2 style={{ margin: '0 0 4px', fontSize: '20px', fontWeight: '800' }}>{MODULE_META_700_11.title}</h2>
-            <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '8px' }}>{MODULE_META_700_11.subtitle}</div>
+            <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '8px' }}>TRI = (P_agency × C_trust) / (T_load + 1) · Fire Chief: érzelmi biztonság szövése · EZ SEV 2 előfeltétel</div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <Badge color="rgba(255,255,255,0.25)" size="10px">{MODULE_META_700_11.status}</Badge>
               <Badge color="rgba(220,38,38,0.8)" size="10px">⚔ Ellentét: {MODULE_META_700_11.antithesis}</Badge>
@@ -195,8 +197,12 @@ export default function CollectiveTrauma700Panel() {
             ))}
           </div>
           <div>
-            <LayerHeader label="Negatív Tényező (kezeletlen trauma)" icon="⚠️" color="#dc2626" />
+            <LayerHeader label="Negatív Tényezők (trauma + T_load)" icon="⚠️" color="#dc2626" />
             {TRC_VARIABLES_NEGATIVE.map(v => (
+              <VarSlider key={v.id} variable={v} value={vals[v.id]} onChange={handleChange} />
+            ))}
+            <LayerHeader label="TRI Formula (P_agency, C_trust)" icon="🔬" color="#6d28d9" />
+            {TRC_VARIABLES_TRI.map(v => (
               <VarSlider key={v.id} variable={v} value={vals[v.id]} onChange={handleChange} />
             ))}
             <LayerHeader label="Kontextus (érintett népesség)" icon="👥" color="#374151" />
@@ -205,6 +211,68 @@ export default function CollectiveTrauma700Panel() {
             ))}
           </div>
         </div>
+      </SectionBox>
+
+      {/* ── TRI Section ── */}
+      <SectionBox title="TRI – Trauma Regeneratív Index" icon="🧬" accentColor="#e9d5ff">
+        {(() => {
+          const triColor = tri_zone === 'CRITICAL' ? '#dc2626' : tri_zone === 'TRANSITIONAL' ? '#ca8a04' : '#16a34a';
+          const triLabel = tri_zone === 'CRITICAL' ? '🔴 KRITIKUS – nem alkalmas önigazgatásra' : tri_zone === 'TRANSITIONAL' ? '🟡 ÁTMENETI – vegyes governance + mentorálás szükséges' : '🟢 REGENERATÍV – teljes 700-as stack futtatható';
+          return (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '12px' }}>
+                <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>P_agency</div>
+                  <div style={{ fontSize: '20px', fontWeight: '900', color: '#7c3aed' }}>{vals.p_agency?.toFixed(2) ?? '—'}</div>
+                  <div style={{ fontSize: '9px', color: '#9ca3af' }}>Közösség cselekvőképessége</div>
+                </div>
+                <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>C_trust</div>
+                  <div style={{ fontSize: '20px', fontWeight: '900', color: '#6d28d9' }}>{vals.c_trust?.toFixed(2) ?? '—'}</div>
+                  <div style={{ fontSize: '9px', color: '#9ca3af' }}>Horizontális bizalmi index</div>
+                </div>
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>T_load</div>
+                  <div style={{ fontSize: '20px', fontWeight: '900', color: '#dc2626' }}>{vals.t_load?.toFixed(1) ?? '—'}</div>
+                  <div style={{ fontSize: '9px', color: '#9ca3af' }}>Traumaterhelés (0–10)</div>
+                </div>
+              </div>
+              <div style={{ padding: '14px', background: triColor + '15', borderRadius: '8px', border: `2px solid ${triColor}40`, textAlign: 'center' }}>
+                <div style={{ fontSize: '32px', fontWeight: '900', color: triColor }}>{(tri ?? 0).toFixed(3)}</div>
+                <div style={{ fontSize: '12px', color: '#374151', marginBottom: '4px' }}>TRI = (P_agency × C_trust) / (T_load + 1)</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: triColor }}>{triLabel}</div>
+              </div>
+              <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '10px' }}>
+                <div style={{ padding: '8px', background: '#fef2f2', borderRadius: '6px', border: '1px solid #fecaca', color: '#dc2626', textAlign: 'center' }}>
+                  <strong>TRI &lt; 0.3</strong><br />KRITIKUS<br /><span style={{ color: '#6b7280' }}>Nem alkalmas önigazgatásra</span>
+                </div>
+                <div style={{ padding: '8px', background: '#fefce8', borderRadius: '6px', border: '1px solid #fde68a', color: '#ca8a04', textAlign: 'center' }}>
+                  <strong>0.3 – 0.7</strong><br />ÁTMENETI<br /><span style={{ color: '#6b7280' }}>Vegyes governance + mentorálás</span>
+                </div>
+                <div style={{ padding: '8px', background: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0', color: '#16a34a', textAlign: 'center' }}>
+                  <strong>TRI &gt; 0.7</strong><br />REGENERATÍV<br /><span style={{ color: '#6b7280' }}>Teljes 700-stack futtatható</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </SectionBox>
+
+      {/* ── 3-rétegű gyógyítási modell ── */}
+      <SectionBox title="3-Rétegű Gyógyítási Modell" icon="🏥" accentColor="#e9d5ff">
+        {[
+          { icon: '🔧', label: 'Fizikai réteg', color: '#b45309', desc: 'JIM-30 infrastruktúra – fizikai biztonság, helyreállítási kapacitás, materiális stabilitás' },
+          { icon: '💬', label: 'Közösségi réteg', color: '#7c3aed', desc: 'Facilitált dialógus, narratív gyógyítás, kollektív emlékezés – Fire Chief érzelmi biztonság szövése' },
+          { icon: '🏛', label: 'Intézményi réteg', color: '#0369a1', desc: 'Trauma-érzékeny design, 900.6.1 protokoll, EZ SEV 2 szintű beavatkozási rendszer' },
+        ].map((layer, i) => (
+          <div key={i} style={{ display: 'flex', gap: '12px', padding: '10px', background: '#faf5ff', borderRadius: '8px', border: `1px solid ${layer.color}30`, marginBottom: '8px' }}>
+            <div style={{ fontSize: '24px' }}>{layer.icon}</div>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: layer.color }}>{layer.label}</div>
+              <div style={{ fontSize: '11px', color: '#374151' }}>{layer.desc}</div>
+            </div>
+          </div>
+        ))}
       </SectionBox>
 
       {/* ── 3. Index komponensek ── */}
